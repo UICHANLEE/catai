@@ -80,7 +80,8 @@ CATAI_PRODUCT_API_URL=http://127.0.0.1:8010/analyze-image
 ## 모델 검수 리포트
 
 학습 데이터 이미지, 원본 UECFood 라벨, Cashlog 학습 라벨, 모델 추론 결과를
-나란히 비교하는 정적 HTML 리포트를 생성합니다.
+나란히 비교하고, 브라우저에서 직접 수정 라벨을 붙일 수 있는 정적 HTML
+리포트를 생성합니다.
 
 ```bash
 .venv/bin/catai-report-cashlog \
@@ -94,6 +95,19 @@ CATAI_PRODUCT_API_URL=http://127.0.0.1:8010/analyze-image
 
 - `reports/cashlog_model_report/index.html`: 브라우저로 여는 시각 검수 리포트
 - `reports/cashlog_model_report/report.json`: 같은 내용을 담은 JSON 결과
+
+리포트에서 할 수 있는 일:
+
+- 모델 추론 결과와 학습 라벨 비교
+- Cashlog 라벨 직접 선택
+- 모델 결과 채택
+- 검수 메모 입력
+- 브라우저 `localStorage` 자동 저장
+- 라벨링 결과를 JSON/CSV로 내보내기
+
+Vercel에 이 저장소를 배포하면 `/` 또는 `/report`에서 같은 리포트를 볼 수
+있습니다. `vercel.json`은 루트 요청을
+`reports/cashlog_model_report/index.html`로 rewrite합니다.
 
 MPS 접근이 제한된 환경에서는 `--device cpu`로 실행하면 됩니다.
 

@@ -22,6 +22,24 @@ DEFAULT_OVERRIDES = PACKAGE_ROOT / "configs/cashlog/uecfood_category_overrides.j
 DEFAULT_OUTPUT = PACKAGE_ROOT / "reports/cashlog_model_report"
 DEFAULT_METRICS = PACKAGE_ROOT / "checkpoints/cashlog_category_uecfood_mps/metrics.csv"
 
+CASHLOG_LABEL_CHOICES = [
+    ("meal_grocery", "식료품"),
+    ("meal_dining", "식비"),
+    ("meal_cafe", "카페/간식"),
+    ("meal_drink", "음료"),
+    ("life_goods", "생활용품"),
+    ("life_appliance", "전자기기/가전"),
+    ("life_clean", "청소/위생"),
+    ("fashion_clothes", "의류/패션"),
+    ("fashion_beauty", "미용"),
+    ("health_med", "의료/건강"),
+    ("edu_book", "도서/교육"),
+    ("leisure_hobby", "취미/여가"),
+    ("gift_present", "선물"),
+    ("misc_uncat", "미분류"),
+    ("misc_other", "기타"),
+]
+
 
 @dataclass(frozen=True)
 class DatasetSample:
@@ -189,6 +207,172 @@ def render_bar(confidence: float) -> str:
     )
 
 
+def render_label_options() -> str:
+    options = ['<option value="">라벨 선택</option>']
+    options.extend(
+        f'<option value="{html.escape(value)}">{html.escape(label)} ({html.escape(value)})</option>'
+        for value, label in CASHLOG_LABEL_CHOICES
+    )
+    return "\n".join(options)
+
+
+def labeling_script() -> str:
+    return """
+  <script>
+    const STORAGE_KEY = "cashlog-model-report-labels-v1";
+    const cards = Array.from(document.querySelectorAll("article[data-sample-id]"));
+    const state = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    const filterSelect = document.querySelector("#filter");
+    const progress = document.querySelector("#label-progress");
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      updateProgress();
+    }
+
+    function recordFor(card) {
+      const id = card.dataset.sampleId;
+      if (!state[id]) {
+        state[id] = { userLabel: "", note: "", updatedAt: "" };
+      }
+      return state[id];
+    }
+
+    function applyState(card) {
+      const record = recordFor(card);
+      const select = card.querySelector(".label-select");
+      const note = card.querySelector(".note-input");
+      if (select) select.value = record.userLabel || "";
+      if (note) note.value = record.note || "";
+      card.dataset.userLabel = record.userLabel || "";
+      card.classList.toggle("labeled", Boolean(record.userLabel));
+    }
+
+    function updateProgress() {
+      const labeled = cards.filter((card) => Boolean(recordFor(card).userLabel)).length;
+      progress.textContent = `${labeled}/${cards.length} 라벨 완료`;
+    }
+
+    function applyFilter() {
+      const mode = filterSelect.value;
+      cards.forEach((card) => {
+        const isWrong = card.dataset.correct !== "true";
+        const isLabeled = Boolean(recordFor(card).userLabel);
+        const show =
+          mode === "all" ||
+          (mode === "wrong" && isWrong) ||
+          (mode === "unlabeled" && !isLabeled) ||
+          (mode === "labeled" && isLabeled);
+        card.hidden = !show;
+      });
+    }
+
+    function rowsForExport() {
+      return cards.map((card) => {
+        const record = recordFor(card);
+        return {
+          sample_id: card.dataset.sampleId,
+          image_path: card.dataset.path,
+          source_label: card.dataset.sourceLabel,
+          training_label: card.dataset.trueCategory,
+          training_cashlog_leaf_id: card.dataset.trueLeaf,
+          predicted_label: card.dataset.predictedCategory,
+          predicted_cashlog_leaf_id: card.dataset.predictedLeaf,
+          confidence: Number(card.dataset.confidence || 0),
+          model_correct: card.dataset.correct === "true",
+          user_label: record.userLabel || "",
+          user_note: record.note || "",
+          updated_at: record.updatedAt || "",
+        };
+      });
+    }
+
+    function download(filename, type, content) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? "");
+      return `"${text.replaceAll('"', '""')}"`;
+    }
+
+    function exportJson() {
+      download(
+        "cashlog_model_labels.json",
+        "application/json",
+        JSON.stringify({ exported_at: new Date().toISOString(), rows: rowsForExport() }, null, 2),
+      );
+    }
+
+    function exportCsv() {
+      const rows = rowsForExport();
+      const headers = Object.keys(rows[0] || {});
+      const csv = [
+        headers.join(","),
+        ...rows.map((row) => headers.map((header) => csvEscape(row[header])).join(",")),
+      ].join("\\n");
+      download("cashlog_model_labels.csv", "text/csv;charset=utf-8", csv);
+    }
+
+    cards.forEach((card) => {
+      applyState(card);
+      const select = card.querySelector(".label-select");
+      const note = card.querySelector(".note-input");
+      const accept = card.querySelector(".accept-btn");
+
+      select?.addEventListener("change", () => {
+        const record = recordFor(card);
+        record.userLabel = select.value;
+        record.updatedAt = new Date().toISOString();
+        card.dataset.userLabel = record.userLabel;
+        card.classList.toggle("labeled", Boolean(record.userLabel));
+        saveState();
+        applyFilter();
+      });
+
+      note?.addEventListener("input", () => {
+        const record = recordFor(card);
+        record.note = note.value;
+        record.updatedAt = new Date().toISOString();
+        saveState();
+      });
+
+      accept?.addEventListener("click", () => {
+        const record = recordFor(card);
+        record.userLabel = card.dataset.predictedLeaf || "";
+        record.updatedAt = new Date().toISOString();
+        applyState(card);
+        saveState();
+        applyFilter();
+      });
+    });
+
+    filterSelect?.addEventListener("change", applyFilter);
+    document.querySelector("#export-json")?.addEventListener("click", exportJson);
+    document.querySelector("#export-csv")?.addEventListener("click", exportCsv);
+    document.querySelector("#clear-labels")?.addEventListener("click", () => {
+      if (!confirm("브라우저에 저장된 라벨을 모두 지울까요?")) return;
+      localStorage.removeItem(STORAGE_KEY);
+      Object.keys(state).forEach((key) => delete state[key]);
+      cards.forEach(applyState);
+      saveState();
+      applyFilter();
+    });
+
+    updateProgress();
+    applyFilter();
+  </script>
+"""
+
+
 def render_html(report: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     metric = report["training_metrics"]
     cards = [
@@ -257,6 +441,52 @@ def render_html(report: dict[str, Any], rows: list[dict[str, Any]]) -> str:
       border-radius: 8px;
       color: #5b4300;
     }}
+    .toolbar {{
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin: 0 32px 20px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .94);
+      backdrop-filter: blur(10px);
+    }}
+    .toolbar select,
+    .toolbar button,
+    .label-panel select,
+    .label-panel input {{
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }}
+    .toolbar select,
+    .label-panel select,
+    .label-panel input {{ padding: 0 10px; }}
+    .toolbar button,
+    .label-panel button {{
+      min-height: 36px;
+      border: 1px solid #9db7d3;
+      border-radius: 6px;
+      background: #eef6ff;
+      color: #064b86;
+      font: inherit;
+      cursor: pointer;
+      padding: 0 12px;
+    }}
+    .toolbar .danger {{
+      border-color: #e7b0aa;
+      background: #fff2f0;
+      color: var(--bad);
+    }}
+    .progress {{ margin-left: auto; color: var(--muted); font-size: 13px; }}
     main {{
       display: grid;
       gap: 14px;
@@ -320,14 +550,29 @@ def render_html(report: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     }}
     .top-list {{ margin: 8px 0 0; padding: 0; list-style: none; }}
     .top-list li {{ margin: 5px 0; color: var(--muted); }}
+    .label-panel {{
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(220px, 320px) auto minmax(220px, 1fr);
+      gap: 10px;
+      align-items: center;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }}
+    .label-panel input {{ width: 100%; }}
+    article.labeled {{
+      outline: 2px solid #9bd2b4;
+      outline-offset: 0;
+    }}
     code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }}
     @media (max-width: 980px) {{
       article {{ grid-template-columns: 1fr 1fr; }}
     }}
     @media (max-width: 620px) {{
       header, .metrics, main {{ padding-left: 16px; padding-right: 16px; }}
-      .note {{ margin-left: 16px; margin-right: 16px; }}
+      .note, .toolbar {{ margin-left: 16px; margin-right: 16px; }}
       article {{ grid-template-columns: 1fr; }}
+      .label-panel {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
@@ -338,7 +583,20 @@ def render_html(report: dict[str, Any], rows: list[dict[str, Any]]) -> str:
   </header>
   <section class="metrics">{card_html}</section>
   <p class="note">현재 checkpoint는 UECFood256으로부터 매핑 가능한 <b>식비</b>, <b>카페/간식</b> 두 범위만 supervised 학습했습니다. 전체 Cashlog 12개 카테고리 성능 리포트로 해석하면 안 됩니다.</p>
+  <section class="toolbar" aria-label="라벨링 도구">
+    <select id="filter" aria-label="샘플 필터">
+      <option value="all">전체 보기</option>
+      <option value="wrong">모델 불일치만</option>
+      <option value="unlabeled">미라벨만</option>
+      <option value="labeled">라벨 완료만</option>
+    </select>
+    <button id="export-json" type="button">JSON 내보내기</button>
+    <button id="export-csv" type="button">CSV 내보내기</button>
+    <button id="clear-labels" class="danger" type="button">라벨 초기화</button>
+    <span id="label-progress" class="progress">0/{report["sample_count"]} 라벨 완료</span>
+  </section>
   <main>{row_html}</main>
+  {labeling_script()}
 </body>
 </html>
 """
@@ -356,7 +614,18 @@ def render_row(row: dict[str, Any]) -> str:
         f'<li>{html.escape(item["display_name"])} / {html.escape(item["category"])} {item["confidence"] * 100:.1f}%</li>'
         for item in row["top_predictions"]
     )
-    return f"""<article>
+    sample_id = html.escape(row["path"], quote=True)
+    return f"""<article
+  data-sample-id="{sample_id}"
+  data-path="{sample_id}"
+  data-source-label="{html.escape(row["source_label"], quote=True)}"
+  data-true-category="{html.escape(row["true_category"], quote=True)}"
+  data-true-leaf="{html.escape(row["true_cashlog_leaf_id"], quote=True)}"
+  data-predicted-category="{html.escape(row["predicted_category"], quote=True)}"
+  data-predicted-leaf="{html.escape(row["predicted_cashlog_leaf_id"], quote=True)}"
+  data-confidence="{row["confidence"]:.8f}"
+  data-correct="{str(row["correct"]).lower()}"
+>
   <section>
     <div class="image-box"><img src="{row["original_uri"]}" alt="training sample"></div>
     <div class="caption"><code>{html.escape(row["path"])}</code></div>
@@ -379,6 +648,13 @@ def render_row(row: dict[str, Any]) -> str:
     <div class="value">{html.escape(row["predicted_display_name"])} <span class="source">({html.escape(row["predicted_category"])})</span></div>
     {render_bar(row["confidence"])}
     <ul class="top-list">{top_items}</ul>
+  </section>
+  <section class="label-panel" aria-label="라벨 수정">
+    <select class="label-select" aria-label="수정 라벨">
+      {render_label_options()}
+    </select>
+    <button class="accept-btn" type="button">모델 결과 채택</button>
+    <input class="note-input" type="text" placeholder="검수 메모 또는 라벨링 근거">
   </section>
 </article>"""
 

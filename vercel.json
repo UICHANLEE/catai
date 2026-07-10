@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/reports/cashlog_model_report/index.html"
+    },
+    {
+      "source": "/report",
+      "destination": "/reports/cashlog_model_report/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/reports/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}
