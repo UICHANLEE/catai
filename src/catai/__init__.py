@@ -1,5 +1,11 @@
 """Cashlog image classification package."""
 
-from .cashlog_classifier import CashlogCategoryClassifier
-
 __all__ = ["CashlogCategoryClassifier"]
+
+
+def __getattr__(name: str):
+    if name == "CashlogCategoryClassifier":
+        from .cashlog_classifier import CashlogCategoryClassifier
+
+        return CashlogCategoryClassifier
+    raise AttributeError(name)

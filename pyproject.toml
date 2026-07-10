@@ -6,13 +6,17 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
-    "pillow>=10.0",
     "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.optional-dependencies]
+model = [
+    "pillow>=10.0",
     "safetensors>=0.4",
     "timm>=1.0",
     "torch>=2.8",
     "torchvision>=0.23",
-    "uvicorn[standard]>=0.30",
 ]
 
 [project.scripts]

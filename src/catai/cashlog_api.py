@@ -1,26 +1,39 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import importlib.util
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from starlette.requests import Request
 
-from .cashlog_classifier import CashlogCategoryClassifier, analyze_base64
-
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 REPORT_DIR = PACKAGE_ROOT / "reports/cashlog_model_report"
 REPORT_INDEX = REPORT_DIR / "index.html"
 REPORT_JSON = REPORT_DIR / "report.json"
+ASSET_ROOT = Path(__file__).resolve().parent / "assets/cashlog_category_uecfood_mps"
+DEFAULT_CHECKPOINT = ASSET_ROOT / "best.pt"
 
 
 @lru_cache(maxsize=1)
-def get_classifier() -> CashlogCategoryClassifier:
+def get_classifier() -> Any:
+    try:
+        from .cashlog_classifier import CashlogCategoryClassifier
+    except ImportError as exc:
+        raise RuntimeError('model dependencies are not installed. Run: pip install "catai[model]"') from exc
+
     return CashlogCategoryClassifier.from_env()
+
+
+def model_runtime_available() -> bool:
+    required = ["PIL", "safetensors", "timm", "torch", "torchvision"]
+    return all(importlib.util.find_spec(name) is not None for name in required)
 
 
 app = FastAPI(title="Catai Cashlog Product Image API")
@@ -57,8 +70,9 @@ def health() -> dict[str, str | bool]:
     return {
         "status": "ok",
         "report_available": REPORT_INDEX.exists(),
-        "checkpoint_available": CashlogCategoryClassifier.default_checkpoint_exists(),
-        "checkpoint": str(CashlogCategoryClassifier.default_checkpoint_path()),
+        "checkpoint_available": DEFAULT_CHECKPOINT.exists(),
+        "checkpoint": str(DEFAULT_CHECKPOINT),
+        "model_runtime_available": model_runtime_available(),
     }
 
 
@@ -69,7 +83,7 @@ async def analyze_image(
 ) -> dict:
     try:
         classifier = get_classifier()
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ImportError, RuntimeError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     if image is not None:
@@ -80,7 +94,7 @@ async def analyze_image(
         body = await request.json()
         image_base64 = str(body.get("imageBase64") or "").strip()
         if image_base64:
-            return analyze_base64(image_base64, classifier)
+            return classifier.analyze(base64.b64decode(image_base64))
 
     raise HTTPException(status_code=400, detail="image file or imageBase64 is required")
 

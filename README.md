@@ -16,14 +16,23 @@ cd /Users/uichan/workspace/catai
 .venv/bin/python -m pip install -e .
 ```
 
-새 환경에서는 일반 pip로도 설치할 수 있습니다.
+모델 추론까지 로컬에서 실행하려면 PyTorch 계열 의존성을 포함해 설치합니다.
+
+```bash
+.venv/bin/python -m pip install -e ".[model]"
+```
+
+새 환경에서는 일반 pip로도 설치할 수 있습니다. Vercel 같은 서버리스 배포는
+기본 설치만 사용하고, 모델 추론 서버는 별도 런타임에서 `[model]` extra로
+실행합니다.
 
 ```bash
 python -m pip install git+https://github.com/UICHANLEE/catai.git
+python -m pip install "catai[model] @ git+https://github.com/UICHANLEE/catai.git"
 ```
 
 패키지 안에 현재 best checkpoint가 포함되어 있어, 별도 모델 파일을 지정하지
-않아도 기본 추론 서버가 동작합니다. 다른 checkpoint를 쓰려면
+않아도 `[model]` extra 설치 환경에서는 추론 서버가 동작합니다. 다른 checkpoint를 쓰려면
 `CATAI_CASHLOG_CHECKPOINT` 환경 변수로 경로를 지정합니다.
 
 ## CLI 예측
@@ -39,6 +48,8 @@ Apple Silicon에서 MPS를 강제하려면:
 ```
 
 ## FastAPI 서버
+
+모델 추론까지 사용할 로컬 서버:
 
 ```bash
 CATAI_DEVICE=mps .venv/bin/catai-serve-cashlog --host 127.0.0.1 --port 8010
@@ -93,8 +104,8 @@ FastAPI 엔드포인트:
 | `GET` | `/` | 라벨링 가능한 모델 검수 리포트 HTML |
 | `GET` | `/report` | 리포트 HTML 별칭 |
 | `GET` | `/report.json` | 리포트 원본 JSON |
-| `GET` | `/health` | report/checkpoint 존재 여부 |
-| `POST` | `/analyze-image` | 상품 이미지 카테고리 추론 |
+| `GET` | `/health` | report/checkpoint/model runtime 존재 여부 |
+| `POST` | `/analyze-image` | 상품 이미지 카테고리 추론. `[model]` extra 필요 |
 
 ## Vercel 배포
 
@@ -103,8 +114,15 @@ FastAPI 엔드포인트:
 - Vercel entrypoint: `main:app`
 - `vercel.json`은 모든 요청을 `/main.py`로 rewrite합니다.
 - `/`와 `/report`는 라벨링 리포트를 FastAPI가 서빙합니다.
-- `/analyze-image`는 checkpoint가 포함된 MobileNetV4 모델로 추론합니다.
+- `/analyze-image`는 FastAPI 라우트로 존재하지만, Vercel 서버리스 번들 크기
+  제한 때문에 PyTorch 모델 런타임은 포함하지 않습니다. Vercel에서는 모델
+  런타임이 없으면 `503`을 반환합니다.
 - `pyproject.toml`의 `[tool.vercel]`도 `main:app`을 가리킵니다.
+
+배포 제한: PyTorch/torchvision/timm까지 Vercel Function에 넣으면 번들이
+500MB 제한을 초과합니다. 그래서 Vercel은 라벨링 리포트 서버로 쓰고, 실제
+모델 추론은 로컬 Mac, GPU 서버, 또는 별도 ML 서빙 환경에서
+`pip install ".[model]"`로 실행합니다.
 
 Vercel이 자동 배포하면 아래 경로를 확인합니다.
 
