@@ -1,0 +1,3 @@
+[console_scripts]
+catai-predict-cashlog = catai.cli:predict_cashlog_main
+catai-serve-cashlog = catai.cashlog_api:main

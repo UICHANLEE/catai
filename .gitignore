@@ -1,0 +1,14 @@
+data/raw/
+data/processed/
+models/
+logs/
+checkpoints/
+.venv/
+
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.tar
+*.tar.gz
+*.zip

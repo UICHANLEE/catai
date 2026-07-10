@@ -1,0 +1,62 @@
+[
+  {
+    "id": "food",
+    "display_name": "식비",
+    "examples": ["도시락", "김밥", "샌드위치", "라면", "식사류"]
+  },
+  {
+    "id": "cafe_snack",
+    "display_name": "카페/간식",
+    "examples": ["커피", "디저트", "빵", "과자", "아이스크림"]
+  },
+  {
+    "id": "household",
+    "display_name": "생활용품",
+    "examples": ["세제", "휴지", "물티슈", "샴푸", "치약"]
+  },
+  {
+    "id": "fashion",
+    "display_name": "의류/패션",
+    "examples": ["티셔츠", "바지", "신발", "가방", "모자"]
+  },
+  {
+    "id": "electronics",
+    "display_name": "전자기기",
+    "examples": ["이어폰", "충전기", "키보드", "마우스", "보조배터리"]
+  },
+  {
+    "id": "culture_education",
+    "display_name": "문화/교육",
+    "examples": ["책", "노트", "필기구", "학습자료"]
+  },
+  {
+    "id": "transport",
+    "display_name": "교통",
+    "examples": ["교통카드", "주유", "차량 관련 이미지"]
+  },
+  {
+    "id": "medical_health",
+    "display_name": "의료/건강",
+    "examples": ["약", "마스크", "비타민", "파스"]
+  },
+  {
+    "id": "beauty",
+    "display_name": "미용",
+    "examples": ["화장품", "향수", "스킨케어", "헤어제품"]
+  },
+  {
+    "id": "hobby_leisure",
+    "display_name": "취미/여가",
+    "examples": ["운동용품", "게임용품", "악기용품", "굿즈"]
+  },
+  {
+    "id": "gift",
+    "display_name": "선물",
+    "examples": ["꽃", "기념품", "선물세트", "포장 상품"]
+  },
+  {
+    "id": "other",
+    "display_name": "기타",
+    "examples": ["분류 불가", "브랜드 로고만 있는 사진", "박스만 보이는 사진"]
+  }
+]

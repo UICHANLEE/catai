@@ -1,0 +1,31 @@
+[project]
+name = "catai"
+version = "0.1.0"
+description = "Cashlog image classification and local model serving"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "pillow>=10.0",
+    "safetensors>=0.4",
+    "timm>=1.0",
+    "torch>=2.8",
+    "torchvision>=0.23",
+]
+
+[project.optional-dependencies]
+serve = [
+    "fastapi>=0.115",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30",
+]
+
+[project.scripts]
+catai-predict-cashlog = "catai.cli:predict_cashlog_main"
+catai-serve-cashlog = "catai.cashlog_api:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
