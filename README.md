@@ -107,7 +107,8 @@ CATAI_PRODUCT_API_URL=http://127.0.0.1:8010/analyze-image
 
 Vercel에 이 저장소를 배포하면 `/` 또는 `/report`에서 같은 리포트를 볼 수
 있습니다. `vercel.json`은 루트 요청을
-`reports/cashlog_model_report/index.html`로 rewrite합니다.
+`reports/cashlog_model_report` 정적 output으로 배포합니다. Python 추론 서버는
+로컬 개발용이고, Vercel 배포 대상은 라벨링 가능한 정적 리포트입니다.
 
 MPS 접근이 제한된 환경에서는 `--device cpu`로 실행하면 됩니다.
 
