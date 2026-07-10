@@ -5,6 +5,11 @@ logs/
 checkpoints/
 .venv/
 
+__pycache__/
+*.pyc
+*.egg-info/
+reports/*_smoke/
+
 *.pt
 *.pth
 *.onnx

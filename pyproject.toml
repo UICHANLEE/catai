@@ -21,6 +21,7 @@ serve = [
 
 [project.scripts]
 catai-predict-cashlog = "catai.cli:predict_cashlog_main"
+catai-report-cashlog = "catai.report:main"
 catai-serve-cashlog = "catai.cashlog_api:main"
 
 [build-system]

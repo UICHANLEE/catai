@@ -57,6 +57,22 @@ def _read_image(image: Image.Image | bytes | str | Path) -> Image.Image:
     return Image.open(image).convert("RGB")
 
 
+def crop_bbox(image: Image.Image, bbox: tuple[int, int, int, int], padding: float = 0.10) -> Image.Image:
+    width, height = image.size
+    x1, y1, x2, y2 = bbox
+    box_w = max(1, x2 - x1)
+    box_h = max(1, y2 - y1)
+    pad_x = int(round(box_w * padding))
+    pad_y = int(round(box_h * padding))
+    left = max(0, x1 - pad_x)
+    top = max(0, y1 - pad_y)
+    right = min(width, x2 + pad_x)
+    bottom = min(height, y2 + pad_y)
+    if right <= left or bottom <= top:
+        return image
+    return image.crop((left, top, right, bottom))
+
+
 def _load_labels(labels_path: Path, checkpoint: dict[str, Any]) -> list[dict[str, Any]]:
     categories = checkpoint.get("categories")
     if isinstance(categories, list) and categories:
@@ -118,8 +134,16 @@ class CashlogCategoryClassifier:
             device=os.getenv("CATAI_DEVICE", "auto"),
         )
 
-    def predict(self, image: Image.Image | bytes | str | Path, top_k: int = 3) -> list[CategoryPrediction]:
+    def predict(
+        self,
+        image: Image.Image | bytes | str | Path,
+        top_k: int = 3,
+        bbox: tuple[int, int, int, int] | None = None,
+        bbox_padding: float = 0.10,
+    ) -> list[CategoryPrediction]:
         pil_image = _read_image(image)
+        if bbox is not None:
+            pil_image = crop_bbox(pil_image, bbox, bbox_padding)
         tensor = self.transform(pil_image).unsqueeze(0).to(self.device)
         with torch.inference_mode():
             logits = self.model(tensor)
@@ -141,8 +165,14 @@ class CashlogCategoryClassifier:
             )
         return predictions
 
-    def analyze(self, image: Image.Image | bytes | str | Path, low_confidence_threshold: float = 0.65) -> dict[str, Any]:
-        predictions = self.predict(image)
+    def analyze(
+        self,
+        image: Image.Image | bytes | str | Path,
+        low_confidence_threshold: float = 0.65,
+        bbox: tuple[int, int, int, int] | None = None,
+        bbox_padding: float = 0.10,
+    ) -> dict[str, Any]:
+        predictions = self.predict(image, bbox=bbox, bbox_padding=bbox_padding)
         best = predictions[0]
         top_categories = [
             {"category": prediction.cashlog_leaf_id, "confidence": prediction.confidence}

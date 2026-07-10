@@ -77,6 +77,26 @@ CATAI_PRODUCT_API_URL=http://127.0.0.1:8010/analyze-image
 - `식비` -> `meal_dining`
 - `카페/간식` -> `meal_cafe`
 
+## 모델 검수 리포트
+
+학습 데이터 이미지, 원본 UECFood 라벨, Cashlog 학습 라벨, 모델 추론 결과를
+나란히 비교하는 정적 HTML 리포트를 생성합니다.
+
+```bash
+.venv/bin/catai-report-cashlog \
+  --split val \
+  --limit 120 \
+  --device mps \
+  --output-dir reports/cashlog_model_report
+```
+
+생성 파일:
+
+- `reports/cashlog_model_report/index.html`: 브라우저로 여는 시각 검수 리포트
+- `reports/cashlog_model_report/report.json`: 같은 내용을 담은 JSON 결과
+
+MPS 접근이 제한된 환경에서는 `--device cpu`로 실행하면 됩니다.
+
 나머지 Cashlog 카테고리는 아직 supervised 이미지 학습 데이터가 부족하므로,
 추가 상품 데이터셋이 들어오기 전까지는 VLM fallback 또는 규칙 기반 매핑이
 필요합니다.
