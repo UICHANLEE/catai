@@ -3,19 +3,15 @@ name = "catai"
 version = "0.1.0"
 description = "Cashlog image classification and local model serving"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.115",
     "pillow>=10.0",
+    "python-multipart>=0.0.9",
     "safetensors>=0.4",
     "timm>=1.0",
     "torch>=2.8",
     "torchvision>=0.23",
-]
-
-[project.optional-dependencies]
-serve = [
-    "fastapi>=0.115",
-    "python-multipart>=0.0.9",
     "uvicorn[standard]>=0.30",
 ]
 
@@ -30,3 +26,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+catai = ["assets/cashlog_category_uecfood_mps/*"]
+
+[tool.vercel]
+entrypoint = "main:app"

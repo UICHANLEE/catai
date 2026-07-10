@@ -11,6 +11,7 @@ __pycache__/
 reports/*_smoke/
 
 *.pt
+!src/catai/assets/cashlog_category_uecfood_mps/best.pt
 *.pth
 *.onnx
 *.safetensors

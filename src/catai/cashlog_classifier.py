@@ -18,8 +18,9 @@ from torchvision import transforms
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CHECKPOINT = PACKAGE_ROOT / "checkpoints/cashlog_category_uecfood_mps/best.pt"
-DEFAULT_LABELS = PACKAGE_ROOT / "checkpoints/cashlog_category_uecfood_mps/labels.json"
+ASSET_ROOT = Path(__file__).resolve().parent / "assets/cashlog_category_uecfood_mps"
+DEFAULT_CHECKPOINT = ASSET_ROOT / "best.pt"
+DEFAULT_LABELS = ASSET_ROOT / "labels.json"
 
 CASHLOG_LEAF_BY_MODEL_ID = {
     "food": "meal_dining",
@@ -120,6 +121,14 @@ class CashlogCategoryClassifier:
                 transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
             ]
         )
+
+    @staticmethod
+    def default_checkpoint_path() -> Path:
+        return Path(os.getenv("CATAI_CASHLOG_CHECKPOINT") or DEFAULT_CHECKPOINT)
+
+    @staticmethod
+    def default_checkpoint_exists() -> bool:
+        return CashlogCategoryClassifier.default_checkpoint_path().exists()
 
     @staticmethod
     def _build_model(num_classes: int) -> nn.Module:

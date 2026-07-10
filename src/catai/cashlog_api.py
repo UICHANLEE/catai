@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import argparse
 from functools import lru_cache
+from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from starlette.requests import Request
 
 from .cashlog_classifier import CashlogCategoryClassifier, analyze_base64
+
+
+PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+REPORT_DIR = PACKAGE_ROOT / "reports/cashlog_model_report"
+REPORT_INDEX = REPORT_DIR / "index.html"
+REPORT_JSON = REPORT_DIR / "report.json"
 
 
 @lru_cache(maxsize=1)
@@ -25,13 +33,32 @@ app.add_middleware(
 )
 
 
+@app.get("/", include_in_schema=False)
+def report_index() -> FileResponse:
+    if not REPORT_INDEX.exists():
+        raise HTTPException(status_code=404, detail="model report has not been generated")
+    return FileResponse(REPORT_INDEX, media_type="text/html")
+
+
+@app.get("/report", include_in_schema=False)
+def report_alias() -> FileResponse:
+    return report_index()
+
+
+@app.get("/report.json", include_in_schema=False)
+def report_json() -> FileResponse:
+    if not REPORT_JSON.exists():
+        raise HTTPException(status_code=404, detail="model report JSON has not been generated")
+    return FileResponse(REPORT_JSON, media_type="application/json")
+
+
 @app.get("/health")
-def health() -> dict[str, str]:
-    classifier = get_classifier()
+def health() -> dict[str, str | bool]:
     return {
         "status": "ok",
-        "device": str(classifier.device),
-        "checkpoint": str(classifier.checkpoint_path),
+        "report_available": REPORT_INDEX.exists(),
+        "checkpoint_available": CashlogCategoryClassifier.default_checkpoint_exists(),
+        "checkpoint": str(CashlogCategoryClassifier.default_checkpoint_path()),
     }
 
 
@@ -40,7 +67,11 @@ async def analyze_image(
     request: Request,
     image: UploadFile | None = File(default=None, description="Product image file"),
 ) -> dict:
-    classifier = get_classifier()
+    try:
+        classifier = get_classifier()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     if image is not None:
         return classifier.analyze(await image.read())
 

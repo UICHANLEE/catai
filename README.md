@@ -5,7 +5,7 @@ Cashlog 상품 사진 카테고리 추천용 이미지 모델 패키지입니다
 현재 포함된 학습 결과:
 
 - Model: `mobilenetv4_conv_small`
-- Checkpoint: `checkpoints/cashlog_category_uecfood_mps/best.pt`
+- Packaged checkpoint: `src/catai/assets/cashlog_category_uecfood_mps/best.pt`
 - 검증 성능: Top-1 `93.61%`, Top-3 `100.00%`
 - 학습 범위: UECFood256에서 매핑 가능한 `식비`, `카페/간식`
 
@@ -13,8 +13,18 @@ Cashlog 상품 사진 카테고리 추천용 이미지 모델 패키지입니다
 
 ```bash
 cd /Users/uichan/workspace/catai
-.venv/bin/python -m pip install -e ".[serve]"
+.venv/bin/python -m pip install -e .
 ```
+
+새 환경에서는 일반 pip로도 설치할 수 있습니다.
+
+```bash
+python -m pip install git+https://github.com/UICHANLEE/catai.git
+```
+
+패키지 안에 현재 best checkpoint가 포함되어 있어, 별도 모델 파일을 지정하지
+않아도 기본 추론 서버가 동작합니다. 다른 checkpoint를 쓰려면
+`CATAI_CASHLOG_CHECKPOINT` 환경 변수로 경로를 지정합니다.
 
 ## CLI 예측
 
@@ -28,10 +38,16 @@ Apple Silicon에서 MPS를 강제하려면:
 .venv/bin/catai-predict-cashlog path/to/product.jpg --device mps --pretty
 ```
 
-## API 서버
+## FastAPI 서버
 
 ```bash
 CATAI_DEVICE=mps .venv/bin/catai-serve-cashlog --host 127.0.0.1 --port 8010
+```
+
+FastAPI 앱 entrypoint:
+
+```text
+main:app
 ```
 
 Health check:
@@ -60,6 +76,42 @@ Multipart 분석 요청:
 
 ```bash
 curl -F image=@path/to/product.jpg http://127.0.0.1:8010/analyze-image
+```
+
+라벨링 리포트:
+
+```text
+http://127.0.0.1:8010/
+http://127.0.0.1:8010/report
+http://127.0.0.1:8010/report.json
+```
+
+FastAPI 엔드포인트:
+
+| Method | Path | 설명 |
+| --- | --- | --- |
+| `GET` | `/` | 라벨링 가능한 모델 검수 리포트 HTML |
+| `GET` | `/report` | 리포트 HTML 별칭 |
+| `GET` | `/report.json` | 리포트 원본 JSON |
+| `GET` | `/health` | report/checkpoint 존재 여부 |
+| `POST` | `/analyze-image` | 상품 이미지 카테고리 추론 |
+
+## Vercel 배포
+
+이 저장소는 FastAPI 앱으로 배포됩니다.
+
+- Vercel entrypoint: `main:app`
+- `vercel.json`은 모든 요청을 `/main.py`로 rewrite합니다.
+- `/`와 `/report`는 라벨링 리포트를 FastAPI가 서빙합니다.
+- `/analyze-image`는 checkpoint가 포함된 MobileNetV4 모델로 추론합니다.
+- `pyproject.toml`의 `[tool.vercel]`도 `main:app`을 가리킵니다.
+
+Vercel이 자동 배포하면 아래 경로를 확인합니다.
+
+```text
+https://<deployment-url>/
+https://<deployment-url>/health
+https://<deployment-url>/report
 ```
 
 ## Cashlog 연결
@@ -106,9 +158,8 @@ CATAI_PRODUCT_API_URL=http://127.0.0.1:8010/analyze-image
 - 라벨링 결과를 JSON/CSV로 내보내기
 
 Vercel에 이 저장소를 배포하면 `/` 또는 `/report`에서 같은 리포트를 볼 수
-있습니다. `vercel.json`은 루트 요청을
-`reports/cashlog_model_report` 정적 output으로 배포합니다. Python 추론 서버는
-로컬 개발용이고, Vercel 배포 대상은 라벨링 가능한 정적 리포트입니다.
+있습니다. 리포트는 FastAPI에서 직접 서빙하고, `/analyze-image`도 같은
+FastAPI 앱에서 제공합니다.
 
 MPS 접근이 제한된 환경에서는 `--device cpu`로 실행하면 됩니다.
 

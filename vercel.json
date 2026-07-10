@@ -1,14 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "echo \"No install needed for static report\"",
-  "buildCommand": "echo \"Using prebuilt Cashlog model report\"",
-  "outputDirectory": "reports/cashlog_model_report",
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
     {
-      "source": "/report",
-      "destination": "/index.html"
+      "source": "/(.*)",
+      "destination": "/main.py"
     }
   ],
   "headers": [
