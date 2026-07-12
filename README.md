@@ -132,6 +132,16 @@ https://<deployment-url>/health
 https://<deployment-url>/report
 ```
 
+모델 추론까지 Vercel 배포에서 시도하려면 `requirements.txt`가 `.[model]`
+extra를 설치합니다. 배포 후 `/health`에서 `checkpoint_available: true`를
+확인하고, `/analyze-image`가 `model dependencies are not installed`를
+반환하지 않아야 합니다.
+
+주의: PyTorch/torchvision/timm 조합은 Vercel Function 용량 제한에 걸릴 수
+있습니다. 이 경우 Vercel은 리포트/헬스체크 용도로 두고, 실제 모델 API는
+Render, Railway, Fly.io, Hugging Face Spaces, Modal 같은 모델 서버 런타임에
+배포한 뒤 Cashlog의 `PRODUCT_ANALYZER_API_URL`에 그 URL을 넣습니다.
+
 ## Cashlog 연결
 
 `/Users/uichan/workspace/cashlog`에서 서버 환경 변수에 아래 값을 설정하면
