@@ -55,6 +55,13 @@ Apple Silicon에서 MPS를 강제하려면:
 CATAI_DEVICE=mps .venv/bin/catai-serve-cashlog --host 127.0.0.1 --port 8010
 ```
 
+배포 환경에서는 Cashlog 앱 주소만 CORS 허용 목록에 등록합니다. 와일드카드(`*`)는 사용하지 않습니다.
+
+```bash
+CATAI_CORS_ALLOWED_ORIGINS=https://your-cashlog-domain.example \
+  catai-serve-cashlog --host 0.0.0.0 --port 8010
+```
+
 FastAPI 앱 entrypoint:
 
 ```text
