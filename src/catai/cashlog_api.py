@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import io
 import importlib.util
 import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -12,11 +14,14 @@ from typing import Any
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from PIL import Image, UnidentifiedImageError
 from starlette.requests import Request
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-REPORT_DIR = PACKAGE_ROOT / "reports/cashlog_model_report"
+REPORT_DIR = Path(
+    os.getenv("CATAI_CASHLOG_REPORT_DIR", PACKAGE_ROOT / "reports/cashlog33/model_report")
+)
 REPORT_INDEX = REPORT_DIR / "index.html"
 REPORT_JSON = REPORT_DIR / "report.json"
 ASSET_ROOT = Path(__file__).resolve().parent / "assets/cashlog_category_uecfood_mps"
@@ -26,15 +31,32 @@ DEFAULT_CHECKPOINT = ASSET_ROOT / "best.pt"
 @lru_cache(maxsize=1)
 def get_classifier() -> Any:
     try:
-        from .cashlog_classifier import CashlogCategoryClassifier
+        from .cashlog_classifier import load_cashlog_classifier_from_env
     except ImportError as exc:
-        raise RuntimeError('model dependencies are not installed. Run: pip install "catai[model]"') from exc
+        extra = "hybrid" if os.getenv("CATAI_CASHLOG_HYBRID_CONFIG") else "model"
+        raise RuntimeError(
+            f'model dependencies are not installed. Run: pip install "catai[{extra}]"'
+        ) from exc
 
-    return CashlogCategoryClassifier.from_env()
+    return load_cashlog_classifier_from_env()
 
 
 def model_runtime_available() -> bool:
-    required = ["PIL", "safetensors", "timm", "torch", "torchvision"]
+    if os.getenv("CATAI_CASHLOG_HYBRID_CONFIG"):
+        required = [
+            "PIL",
+            "joblib",
+            "onnxruntime",
+            "pillow_heif",
+            "rapidocr",
+            "safetensors",
+            "sklearn",
+            "torch",
+            "torchvision",
+            "transformers",
+        ]
+    else:
+        required = ["PIL", "safetensors", "timm", "torch", "torchvision"]
     return all(importlib.util.find_spec(name) is not None for name in required)
 
 
@@ -54,7 +76,7 @@ app.add_middleware(
     allow_origins=cors_allowed_origins(),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key", "X-Internal-API-Key"],
 )
 
 
@@ -68,6 +90,8 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_PIXELS = 30_000_000
+MAX_REQUEST_BYTES = 14 * 1024 * 1024
 MIME_BY_EXTENSION = {
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
@@ -103,8 +127,31 @@ def validate_image(data: bytes, declared_mime: str, filename: str | None = None)
         raise HTTPException(status_code=400, detail="image MIME type and file signature do not match")
     if filename:
         extension = Path(filename).suffix.lower().lstrip(".")
-        if MIME_BY_EXTENSION.get(extension) != detected_mime:
+        if extension and MIME_BY_EXTENSION.get(extension) != detected_mime:
             raise HTTPException(status_code=400, detail="image extension and file signature do not match")
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            width, height = image.size
+            if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+                raise HTTPException(status_code=413, detail="image dimensions exceed the 30MP limit")
+            image.verify()
+    except HTTPException:
+        raise
+    except (Image.DecompressionBombError, UnidentifiedImageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="image payload cannot be decoded safely") from exc
+
+
+def verify_internal_api_key(value: str | None) -> None:
+    required = os.getenv("CATAI_REQUIRE_INTERNAL_API_KEY", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    configured = os.getenv("CATAI_INTERNAL_API_KEY")
+    if required and not configured:
+        raise HTTPException(status_code=503, detail="internal API authentication is not configured")
+    if configured and (value is None or not secrets.compare_digest(value, configured)):
+        raise HTTPException(status_code=401, detail="unauthorized")
 
 
 @app.get("/", include_in_schema=False)
@@ -128,11 +175,20 @@ def report_json() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict[str, str | bool]:
+    hybrid_config = os.getenv("CATAI_CASHLOG_HYBRID_CONFIG")
+    ensemble_config = os.getenv("CATAI_CASHLOG_ENSEMBLE_CONFIG")
+    serving_path = (
+        Path(hybrid_config or ensemble_config)
+        if (hybrid_config or ensemble_config)
+        else DEFAULT_CHECKPOINT
+    )
+    serving_mode = "hybrid" if hybrid_config else "ensemble" if ensemble_config else "single"
     return {
         "status": "ok",
         "report_available": REPORT_INDEX.exists(),
-        "checkpoint_available": DEFAULT_CHECKPOINT.exists(),
-        "checkpoint": str(DEFAULT_CHECKPOINT),
+        "checkpoint_available": serving_path.exists(),
+        "checkpoint": str(serving_path),
+        "serving_mode": serving_mode,
         "model_runtime_available": model_runtime_available(),
     }
 
@@ -142,9 +198,19 @@ async def analyze_image(
     request: Request,
     image: UploadFile | None = File(default=None, description="Product image file"),
 ) -> dict:
+    declared_length = request.headers.get("content-length")
+    if declared_length:
+        try:
+            if int(declared_length) > MAX_REQUEST_BYTES:
+                raise HTTPException(status_code=413, detail="request exceeds the 14MB limit")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="invalid Content-Length") from exc
+    verify_internal_api_key(
+        request.headers.get("x-internal-api-key") or request.headers.get("x-api-key")
+    )
     try:
         classifier = get_classifier()
-    except (FileNotFoundError, ImportError, RuntimeError) as exc:
+    except (FileNotFoundError, ImportError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     if image is not None:

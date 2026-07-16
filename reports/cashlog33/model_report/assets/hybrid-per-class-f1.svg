@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1012" viewBox="0 0 1120 1012">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="38" font-family="system-ui,sans-serif" font-size="22" font-weight="700" fill="#111827">Hybrid synthetic E2E F1 by leaf</text>
+<text x="24" y="93" font-family="ui-monospace,monospace" font-size="13" fill="#374151">meal_grocery</text>
+<rect x="260" y="80" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="80" width="750.00" height="16" rx="2" fill="#f97316"/>
+<text x="1022" y="93" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="120" font-family="ui-monospace,monospace" font-size="13" fill="#374151">meal_dining</text>
+<rect x="260" y="107" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="107" width="750.00" height="16" rx="2" fill="#059669"/>
+<text x="1022" y="120" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="147" font-family="ui-monospace,monospace" font-size="13" fill="#374151">meal_cafe</text>
+<rect x="260" y="134" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="134" width="750.00" height="16" rx="2" fill="#2563eb"/>
+<text x="1022" y="147" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="174" font-family="ui-monospace,monospace" font-size="13" fill="#374151">meal_drink</text>
+<rect x="260" y="161" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="161" width="750.00" height="16" rx="2" fill="#db2777"/>
+<text x="1022" y="174" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="201" font-family="ui-monospace,monospace" font-size="13" fill="#374151">life_goods</text>
+<rect x="260" y="188" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="188" width="750.00" height="16" rx="2" fill="#7c3aed"/>
+<text x="1022" y="201" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="228" font-family="ui-monospace,monospace" font-size="13" fill="#374151">life_appliance</text>
+<rect x="260" y="215" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="215" width="750.00" height="16" rx="2" fill="#f97316"/>
+<text x="1022" y="228" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="255" font-family="ui-monospace,monospace" font-size="13" fill="#374151">life_clean</text>
+<rect x="260" y="242" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="242" width="750.00" height="16" rx="2" fill="#059669"/>
+<text x="1022" y="255" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="282" font-family="ui-monospace,monospace" font-size="13" fill="#374151">housing_rent</text>
+<rect x="260" y="269" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="269" width="750.00" height="16" rx="2" fill="#2563eb"/>
+<text x="1022" y="282" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="309" font-family="ui-monospace,monospace" font-size="13" fill="#374151">housing_fee</text>
+<rect x="260" y="296" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="296" width="750.00" height="16" rx="2" fill="#db2777"/>
+<text x="1022" y="309" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="336" font-family="ui-monospace,monospace" font-size="13" fill="#374151">housing_utility</text>
+<rect x="260" y="323" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="323" width="750.00" height="16" rx="2" fill="#7c3aed"/>
+<text x="1022" y="336" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="363" font-family="ui-monospace,monospace" font-size="13" fill="#374151">transit_public</text>
+<rect x="260" y="350" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="350" width="750.00" height="16" rx="2" fill="#f97316"/>
+<text x="1022" y="363" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="390" font-family="ui-monospace,monospace" font-size="13" fill="#374151">transit_car</text>
+<rect x="260" y="377" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="377" width="750.00" height="16" rx="2" fill="#059669"/>
+<text x="1022" y="390" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="417" font-family="ui-monospace,monospace" font-size="13" fill="#374151">transit_maintain</text>
+<rect x="260" y="404" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="404" width="750.00" height="16" rx="2" fill="#2563eb"/>
+<text x="1022" y="417" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="444" font-family="ui-monospace,monospace" font-size="13" fill="#374151">comm_internet</text>
+<rect x="260" y="431" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="431" width="750.00" height="16" rx="2" fill="#db2777"/>
+<text x="1022" y="444" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="471" font-family="ui-monospace,monospace" font-size="13" fill="#374151">comm_mobile</text>
+<rect x="260" y="458" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="458" width="750.00" height="16" rx="2" fill="#7c3aed"/>
+<text x="1022" y="471" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="498" font-family="ui-monospace,monospace" font-size="13" fill="#374151">fashion_clothes</text>
+<rect x="260" y="485" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="485" width="750.00" height="16" rx="2" fill="#f97316"/>
+<text x="1022" y="498" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="525" font-family="ui-monospace,monospace" font-size="13" fill="#374151">fashion_beauty</text>
+<rect x="260" y="512" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="512" width="750.00" height="16" rx="2" fill="#059669"/>
+<text x="1022" y="525" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="552" font-family="ui-monospace,monospace" font-size="13" fill="#374151">health_med</text>
+<rect x="260" y="539" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="539" width="600.00" height="16" rx="2" fill="#2563eb"/>
+<text x="1022" y="552" font-family="system-ui,sans-serif" font-size="13" fill="#111827">80.00%</text>
+<text x="24" y="579" font-family="ui-monospace,monospace" font-size="13" fill="#374151">health_gym</text>
+<rect x="260" y="566" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="566" width="750.00" height="16" rx="2" fill="#db2777"/>
+<text x="1022" y="579" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="606" font-family="ui-monospace,monospace" font-size="13" fill="#374151">edu_class</text>
+<rect x="260" y="593" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="593" width="750.00" height="16" rx="2" fill="#7c3aed"/>
+<text x="1022" y="606" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="633" font-family="ui-monospace,monospace" font-size="13" fill="#374151">edu_book</text>
+<rect x="260" y="620" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="620" width="750.00" height="16" rx="2" fill="#f97316"/>
+<text x="1022" y="633" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="660" font-family="ui-monospace,monospace" font-size="13" fill="#374151">leisure_show</text>
+<rect x="260" y="647" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="647" width="750.00" height="16" rx="2" fill="#059669"/>
+<text x="1022" y="660" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="687" font-family="ui-monospace,monospace" font-size="13" fill="#374151">leisure_trip</text>
+<rect x="260" y="674" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="674" width="750.00" height="16" rx="2" fill="#2563eb"/>
+<text x="1022" y="687" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="714" font-family="ui-monospace,monospace" font-size="13" fill="#374151">leisure_hobby</text>
+<rect x="260" y="701" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="701" width="750.00" height="16" rx="2" fill="#db2777"/>
+<text x="1022" y="714" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="741" font-family="ui-monospace,monospace" font-size="13" fill="#374151">gift_event</text>
+<rect x="260" y="728" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="728" width="750.00" height="16" rx="2" fill="#7c3aed"/>
+<text x="1022" y="741" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="768" font-family="ui-monospace,monospace" font-size="13" fill="#374151">gift_present</text>
+<rect x="260" y="755" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="755" width="750.00" height="16" rx="2" fill="#f97316"/>
+<text x="1022" y="768" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="795" font-family="ui-monospace,monospace" font-size="13" fill="#374151">finance_insure</text>
+<rect x="260" y="782" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="782" width="750.00" height="16" rx="2" fill="#059669"/>
+<text x="1022" y="795" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="822" font-family="ui-monospace,monospace" font-size="13" fill="#374151">finance_save</text>
+<rect x="260" y="809" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="809" width="750.00" height="16" rx="2" fill="#2563eb"/>
+<text x="1022" y="822" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="849" font-family="ui-monospace,monospace" font-size="13" fill="#374151">finance_fee</text>
+<rect x="260" y="836" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="836" width="750.00" height="16" rx="2" fill="#db2777"/>
+<text x="1022" y="849" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="876" font-family="ui-monospace,monospace" font-size="13" fill="#374151">family_kids</text>
+<rect x="260" y="863" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="863" width="750.00" height="16" rx="2" fill="#7c3aed"/>
+<text x="1022" y="876" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="903" font-family="ui-monospace,monospace" font-size="13" fill="#374151">family_pet</text>
+<rect x="260" y="890" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="890" width="750.00" height="16" rx="2" fill="#f97316"/>
+<text x="1022" y="903" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+<text x="24" y="930" font-family="ui-monospace,monospace" font-size="13" fill="#374151">misc_uncat</text>
+<rect x="260" y="917" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="917" width="642.86" height="16" rx="2" fill="#059669"/>
+<text x="1022" y="930" font-family="system-ui,sans-serif" font-size="13" fill="#111827">85.71%</text>
+<text x="24" y="957" font-family="ui-monospace,monospace" font-size="13" fill="#374151">misc_other</text>
+<rect x="260" y="944" width="750" height="16" rx="2" fill="#eef2f7"/>
+<rect x="260" y="944" width="750.00" height="16" rx="2" fill="#2563eb"/>
+<text x="1022" y="957" font-family="system-ui,sans-serif" font-size="13" fill="#111827">100.00%</text>
+</svg>

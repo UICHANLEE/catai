@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashlog.local/schemas/category-correction-v1.json",
+  "title": "CashLog category correction event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "sample_id",
+    "model_version",
+    "predicted_top3",
+    "selected_leaf_id",
+    "occurred_at",
+    "image_retention_consent"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "event_id": {"type": "string", "format": "uuid"},
+    "sample_id": {"type": "string", "minLength": 8, "maxLength": 128},
+    "model_version": {"type": "string"},
+    "predicted_top3": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "confidence"],
+        "properties": {
+          "category": {"type": "string"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        }
+      }
+    },
+    "selected_leaf_id": {"type": "string", "pattern": "^[a-z]+_[a-z]+$"},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "image_retention_consent": {"type": "boolean"},
+    "image_object_key": {"type": ["string", "null"]},
+    "source": {"enum": ["top3_selection", "manual_edit"]}
+  }
+}
