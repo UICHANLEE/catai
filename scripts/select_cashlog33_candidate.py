@@ -25,7 +25,7 @@ DEFAULT_OUTPUT = ROOT / "reports/cashlog33/model_selection.json"
 PRODUCTION_THRESHOLDS = {
     "minimum_samples": 330,
     "minimum_per_leaf": 10,
-    "top1_accuracy": 0.80,
+    "top1_accuracy": 0.95,
     "top3_accuracy": 0.95,
     "macro_f1": 0.75,
     "minimum_leaf_recall": 0.60,
@@ -183,6 +183,13 @@ def main() -> None:
             "synthetic I/O",
         ),
         gate(
+            "synthetic_top1",
+            e2e["top1_accuracy"] >= 0.95,
+            e2e["top1_accuracy"],
+            ">= 0.95",
+            "synthetic I/O",
+        ),
+        gate(
             "synthetic_top3",
             e2e["top3_accuracy"] >= 0.90,
             e2e["top3_accuracy"],
@@ -201,7 +208,7 @@ def main() -> None:
             e2e["latency_p95_seconds"] <= PRODUCTION_THRESHOLDS["maximum_latency_p95_seconds"],
             e2e["latency_p95_seconds"],
             f"<= {PRODUCTION_THRESHOLDS['maximum_latency_p95_seconds']}",
-            "local CPU synthetic I/O",
+            f"local {e2e.get('device', 'unknown')} synthetic I/O",
         ),
     ]
 
@@ -216,7 +223,7 @@ def main() -> None:
             gate("real_samples", real["samples"] >= 330, real["samples"], ">= 330", "real holdout"),
             gate("real_leaf_count", real["leaf_count"] == 33, real["leaf_count"], 33, "real holdout"),
             gate("real_minimum_per_leaf", real["minimum_per_leaf"] >= 10, real["minimum_per_leaf"], ">= 10", "real holdout"),
-            gate("real_top1", real["top1_accuracy"] >= 0.80, real["top1_accuracy"], ">= 0.80", "real holdout"),
+            gate("real_top1", real["top1_accuracy"] >= 0.95, real["top1_accuracy"], ">= 0.95", "real holdout"),
             gate("real_top3", real["top3_accuracy"] >= 0.95, real["top3_accuracy"], ">= 0.95", "real holdout"),
             gate("real_macro_f1", real["macro_f1"] >= 0.75, real["macro_f1"], ">= 0.75", "real holdout"),
             gate("real_minimum_recall", real_recall is not None and real_recall >= 0.60, real_recall, ">= 0.60", "real holdout"),

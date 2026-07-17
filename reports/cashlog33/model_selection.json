@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-16T20:04:56.264979+00:00",
-  "selected_candidate": "cashlog33-hybrid-v1",
+  "generated_at": "2026-07-17T11:29:23.361112+00:00",
+  "selected_candidate": "cashlog33-hybrid-v1.1-fast",
   "serving_config": "configs/cashlog/hybrid.serving.json",
   "decision": "guarded_integration_candidate",
   "integration_ready": true,
@@ -15,7 +15,7 @@
   "thresholds": {
     "minimum_samples": 330,
     "minimum_per_leaf": 10,
-    "top1_accuracy": 0.8,
+    "top1_accuracy": 0.95,
     "top3_accuracy": 0.95,
     "macro_f1": 0.75,
     "minimum_leaf_recall": 0.6,
@@ -53,6 +53,13 @@
       "scope": "synthetic I/O"
     },
     {
+      "name": "synthetic_top1",
+      "passed": true,
+      "actual": 0.98989898989899,
+      "required": ">= 0.95",
+      "scope": "synthetic I/O"
+    },
+    {
       "name": "synthetic_top3",
       "passed": true,
       "actual": 0.98989898989899,
@@ -69,9 +76,9 @@
     {
       "name": "synthetic_latency_p95",
       "passed": true,
-      "actual": 0.37764707116875773,
+      "actual": 0.27766522530000654,
       "required": "<= 3.0",
-      "scope": "local CPU synthetic I/O"
+      "scope": "local mps synthetic I/O"
     },
     {
       "name": "real_cashlog_holdout",

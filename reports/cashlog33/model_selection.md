@@ -1,7 +1,7 @@
 # CashLog 33 Model Selection
 
-- Generated: `2026-07-16T20:04:56.264979+00:00`
-- Candidate: `cashlog33-hybrid-v1`
+- Generated: `2026-07-17T11:29:23.361112+00:00`
+- Candidate: `cashlog33-hybrid-v1.1-fast`
 - Decision: **guarded_integration_candidate**
 - Production eligible: **false**
 
@@ -13,9 +13,10 @@
 | artifact_sha256 | PASS | `True` | `True` | supply-chain |
 | vision_head_beats_zero_shot_top1 | PASS | `0.7926829268292683` | `> 0.5975609756097561` | Open Images proxy |
 | synthetic_33_leaf_coverage | PASS | `33` | `33` | synthetic I/O |
+| synthetic_top1 | PASS | `0.98989898989899` | `>= 0.95` | synthetic I/O |
 | synthetic_top3 | PASS | `0.98989898989899` | `>= 0.90` | synthetic I/O |
 | synthetic_false_auto_confirm | PASS | `0.0` | `<= 0.02` | synthetic I/O |
-| synthetic_latency_p95 | PASS | `0.37764707116875773` | `<= 3.0` | local CPU synthetic I/O |
+| synthetic_latency_p95 | PASS | `0.27766522530000654` | `<= 3.0` | local mps synthetic I/O |
 | real_cashlog_holdout | FAIL | `missing` | `frozen manual set: >=10 photos x 33 leaves` | real holdout |
 
 ## Decision Note

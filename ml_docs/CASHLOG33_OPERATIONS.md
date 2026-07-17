@@ -28,6 +28,20 @@ CATAI_INTERNAL_API_KEY='<secret>' \
 docker compose -f docker-compose.prod.yml up -d --build cashlog-api
 ```
 
+Apple Silicon production-like testing uses native MPS instead of the CPU-only
+Docker worker:
+
+```bash
+scripts/install_cashlog_mps_service.sh
+curl --fail http://127.0.0.1:8010/health
+tail -f logs/model-api.jsonl
+tail -f logs/model-api.error.log
+```
+
+The owner-only `.runtime/cashlog-api.env` supplies the internal key and is ignored
+by Git. `model-api.jsonl` contains rotating inference/request JSON events; library
+and process errors go to `model-api.error.log`.
+
 When CashLog calls the worker directly, set its server-only
 `PRODUCT_ANALYZER_API_KEY` to the same value. The existing backend emits
 `X-API-Key`; the worker also accepts the preferred `X-Internal-API-Key` during
@@ -39,6 +53,8 @@ Health checks:
 curl --fail http://127.0.0.1:5500/health
 curl --fail http://127.0.0.1:8080/health
 curl --fail http://127.0.0.1:8010/health
+curl --fail --header "X-Internal-API-Key: $CATAI_INTERNAL_API_KEY" \
+  http://127.0.0.1:8010/metrics
 ```
 
 ## Airflow Training
@@ -119,6 +135,10 @@ leaf and model version. Alert on worker unavailability, p95 above three seconds,
 unexpected fallback spikes, a leaf receiving no traffic, or a sudden correction-rate
 increase. Accuracy and calibration are computed only after delayed manual truth is
 available; online prediction confidence alone is not an accuracy metric.
+
+Every inference emits a request ID, model version, device, category, confidence,
+review flag, total latency, and stage latencies. The in-memory `/metrics` window is
+bounded to 1,000 requests by default and resets on process restart.
 
 Retraining is triggered by a reviewed data release, sustained per-leaf correction
 drift, or a planned model change. It is not triggered automatically from unreviewed

@@ -179,7 +179,7 @@ input is a frozen, consented, manually reviewed real-photo holdout:
 - No train/threshold tuning reuse, no duplicate or near-duplicate split leakage.
 - Redacted PII and a defined private-storage retention/deletion policy.
 
-After that input exists, one frozen run must pass Top-1 `>=0.80`, Top-3 `>=0.95`,
+After that input exists, one frozen run must pass Top-1 `>=0.95`, Top-3 `>=0.95`,
 macro F1 `>=0.75`, every leaf recall `>=0.60`, ECE `<=0.08`, false auto-confirm
 `<=0.02`, and p95 latency `<=3s` before automatic confirmation can be considered.
 
@@ -222,7 +222,7 @@ Deployment checks:
 | Existing cafe receipt through Galaxy | `meal_cafe`, confidence 0.8143 |
 | Warm end-to-end relay latency | 2.01 seconds |
 | Galaxy LAN ports 8000 and 18010 | connection refused |
-| Direct Cloudflare Quick Tunnel | stopped |
+| Direct Cloudflare Quick Tunnel | restored for the explicitly requested test phase; URL is ephemeral |
 | Galaxy Tailscale-only gateway bind | authenticated HTTP 200; unauthenticated 401 |
 | macOS reverse-tunnel LaunchAgent | running; automatic restart verified |
 | Obsolete reverse tunnels | removed; only managed loopback tunnel remains |
@@ -235,12 +235,11 @@ the SSH process and recovered model health to HTTP 200 automatically. Both the
 gateway bind and selected loopback model URL are stored in owner-only runtime files,
 not in the repository.
 
-The private Mac-to-Galaxy model path is complete. The public mobile application path
-is not yet complete because the Tailnet has no separate Backend/Home Server node.
-React Native must not receive the Galaxy address or gateway key. A backend must join
-the Tailnet and call the relay, or a JWT-validating backend must run on the Galaxy
-behind a named Cloudflare Tunnel. The removed Quick Tunnel must not be restarted as
-a production substitute.
+The private Mac-to-Galaxy model path is complete. During the current test phase an
+ephemeral Cloudflare Quick Tunnel is active in front of the authenticated Galaxy
+gateway and Vercel points to that URL. React Native still receives neither the
+Galaxy address nor the gateway key. This test tunnel must be replaced by a named,
+policy-controlled tunnel before production release.
 
 ## 11. Monitoring Locations
 
@@ -254,3 +253,31 @@ a production substitute.
 The online service should monitor request/error count, warm and cold latency,
 fallback rate, review rate, selected Top-3 rank, and correction rate by leaf/model.
 Raw images, OCR text containing PII, JWTs, and internal API keys must not be logged.
+
+## 12. MPS Accuracy, Latency, and Observability Update (2026-07-17)
+
+The worker was moved from the Linux Docker CPU runtime to a loopback-only macOS
+LaunchAgent because Docker Desktop cannot expose Apple MPS. The service now eagerly
+loads and warms the model, runs SigLIP2 in FP16 on MPS, overlaps MPS vision with CPU
+OCR, bounds large OCR inputs, and records stage timing without image/OCR contents.
+
+The first aggressive OCR resize failed the new Top-1 95% gate at 93.94%. It was
+rejected. Restoring a 736px OCR minimum while capping large inputs at 960px recovered
+the fixed 33-leaf integration result to Top-1 98.99% and Top-3 98.99%.
+
+| Measurement | Before | After |
+|---|---:|---:|
+| 33-leaf fixture p50 | 349ms | 233ms |
+| 33-leaf fixture p95 | 378ms | 278ms |
+| Repeated 1254px cafe image, local API | about 710ms CPU Docker | about 350ms native MPS |
+| SigLIP2 vision stage p50 | not recorded | 44ms |
+| OCR stage p50 on fixtures | not recorded | 224ms |
+
+The UECFood meal specialist was retrained for two MPS epochs after removing double
+class balancing. Its fixed 4,249-image validation reached Top-1 98.05% and Top-3
+100%. Its scope is only `meal_dining` and `meal_cafe`; it is retained as a candidate
+artifact and is not evidence of 33-leaf real-photo accuracy.
+
+Observability is available through protected `GET /metrics`, response headers
+`X-Request-ID` and `X-Process-Time-Ms`, `logs/model-api.jsonl`, MLflow experiment
+`cashlog33-mps-specialists`, and per-run `progress.json`/`training.jsonl` files.

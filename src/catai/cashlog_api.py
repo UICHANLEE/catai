@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import base64
 import binascii
 import io
 import importlib.util
 import os
+import re
 import secrets
+import time
+import uuid
+from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -14,8 +19,11 @@ from typing import Any
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, UnidentifiedImageError
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
+
+from .telemetry import InferenceTelemetry, configure_json_logger, log_event
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
@@ -26,10 +34,31 @@ REPORT_INDEX = REPORT_DIR / "index.html"
 REPORT_JSON = REPORT_DIR / "report.json"
 ASSET_ROOT = Path(__file__).resolve().parent / "assets/cashlog_category_uecfood_mps"
 DEFAULT_CHECKPOINT = ASSET_ROOT / "best.pt"
+LOGGER = configure_json_logger("catai.inference")
+TELEMETRY = InferenceTelemetry(
+    max_records=max(10, int(os.getenv("CATAI_METRICS_WINDOW", "1000")))
+)
+MODEL_STATE: dict[str, Any] = {
+    "loaded": False,
+    "load_ms": None,
+    "warmup_ms": None,
+    "device": None,
+    "model": None,
+}
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+INFERENCE_SEMAPHORE = asyncio.Semaphore(
+    max(1, int(os.getenv("CATAI_MAX_CONCURRENT_INFERENCE", "1")))
+)
+
+
+def env_enabled(name: str, default: bool = False) -> bool:
+    fallback = "true" if default else "false"
+    return os.getenv(name, fallback).lower() in {"1", "true", "yes"}
 
 
 @lru_cache(maxsize=1)
 def get_classifier() -> Any:
+    started = time.perf_counter()
     try:
         from .cashlog_classifier import load_cashlog_classifier_from_env
     except ImportError as exc:
@@ -38,7 +67,22 @@ def get_classifier() -> Any:
             f'model dependencies are not installed. Run: pip install "catai[{extra}]"'
         ) from exc
 
-    return load_cashlog_classifier_from_env()
+    classifier = load_cashlog_classifier_from_env()
+    load_ms = (time.perf_counter() - started) * 1000.0
+    MODEL_STATE.update(
+        {
+            "loaded": True,
+            "load_ms": load_ms,
+            "device": str(getattr(classifier, "device", "unknown")),
+            "model": str(
+                getattr(classifier, "config", {}).get(
+                    "model_version", classifier.__class__.__name__
+                )
+            ),
+        }
+    )
+    log_event(LOGGER, "model_loaded", **MODEL_STATE)
+    return classifier
 
 
 def model_runtime_available() -> bool:
@@ -60,7 +104,31 @@ def model_runtime_available() -> bool:
     return all(importlib.util.find_spec(name) is not None for name in required)
 
 
-app = FastAPI(title="Catai Cashlog Product Image API")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    if env_enabled("CATAI_EAGER_LOAD_MODEL") and model_runtime_available():
+        classifier = await run_in_threadpool(get_classifier)
+        if env_enabled("CATAI_WARMUP_MODEL"):
+            started = time.perf_counter()
+            buffer = io.BytesIO()
+            warmup_image = Image.new("RGB", (960, 960), "white")
+            draw = ImageDraw.Draw(warmup_image)
+            try:
+                font = ImageFont.truetype("DejaVuSans.ttf", 48)
+            except OSError:
+                font = ImageFont.load_default()
+            for index, text in enumerate(["CASHLOG RECEIPT", "COFFEE 5500", "TOTAL 5500"]):
+                draw.text((80, 100 + index * 120), text, fill="black", font=font)
+            warmup_image.save(buffer, format="JPEG", quality=88)
+            for _ in range(2):
+                warmup = await run_in_threadpool(classifier.analyze, buffer.getvalue())
+                warmup.pop("_timings_ms", None)
+            MODEL_STATE["warmup_ms"] = (time.perf_counter() - started) * 1000.0
+            log_event(LOGGER, "model_warmed", **MODEL_STATE)
+    yield
+
+
+app = FastAPI(title="Catai Cashlog Product Image API", lifespan=lifespan)
 
 
 def cors_allowed_origins() -> list[str]:
@@ -82,11 +150,47 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+    supplied_request_id = request.headers.get("x-request-id", "")
+    request_id = (
+        supplied_request_id
+        if REQUEST_ID_PATTERN.fullmatch(supplied_request_id)
+        else uuid.uuid4().hex
+    )
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+    except Exception:
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+        log_event(
+            LOGGER,
+            "request_failed",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            total_ms=round(elapsed_ms, 3),
+        )
+        raise
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Process-Time-Ms"] = f"{elapsed_ms:.3f}"
     response.headers["Content-Security-Policy"] = "frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
+    if request.url.path != "/health" or env_enabled("CATAI_LOG_HEALTH_REQUESTS"):
+        log_event(
+            LOGGER,
+            "request_completed",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            total_ms=round(elapsed_ms, 3),
+        )
     return response
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
@@ -174,7 +278,7 @@ def report_json() -> FileResponse:
 
 
 @app.get("/health")
-def health() -> dict[str, str | bool]:
+def health() -> dict[str, Any]:
     hybrid_config = os.getenv("CATAI_CASHLOG_HYBRID_CONFIG")
     ensemble_config = os.getenv("CATAI_CASHLOG_ENSEMBLE_CONFIG")
     serving_path = (
@@ -190,6 +294,23 @@ def health() -> dict[str, str | bool]:
         "checkpoint": str(serving_path),
         "serving_mode": serving_mode,
         "model_runtime_available": model_runtime_available(),
+        "model_loaded": bool(MODEL_STATE["loaded"]),
+        "model_device": MODEL_STATE["device"],
+        "model_version": MODEL_STATE["model"],
+        "model_load_ms": MODEL_STATE["load_ms"],
+        "model_warmup_ms": MODEL_STATE["warmup_ms"],
+    }
+
+
+@app.get("/metrics")
+def metrics(request: Request) -> dict[str, Any]:
+    verify_internal_api_key(
+        request.headers.get("x-internal-api-key") or request.headers.get("x-api-key")
+    )
+    return {
+        "status": "ok",
+        "model": dict(MODEL_STATE),
+        "inference": TELEMETRY.snapshot(),
     }
 
 
@@ -216,7 +337,7 @@ async def analyze_image(
     if image is not None:
         image_bytes = await image.read(MAX_IMAGE_BYTES + 1)
         validate_image(image_bytes, image.content_type or "", image.filename)
-        return classifier.analyze(image_bytes)
+        return await run_analysis(request, classifier, image_bytes)
 
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
@@ -232,9 +353,66 @@ async def analyze_image(
                 str(body.get("mimeType") or ""),
                 str(body.get("filename") or "") or None,
             )
-            return classifier.analyze(image_bytes)
+            return await run_analysis(request, classifier, image_bytes)
 
     raise HTTPException(status_code=400, detail="image file or imageBase64 is required")
+
+
+async def run_analysis(request: Request, classifier: Any, image_bytes: bytes) -> dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        async with INFERENCE_SEMAPHORE:
+            result = await run_in_threadpool(classifier.analyze, image_bytes)
+    except Exception as exc:
+        total_ms = (time.perf_counter() - started) * 1000.0
+        TELEMETRY.record(
+            status="error",
+            total_ms=total_ms,
+            model=str(MODEL_STATE["model"] or "unknown"),
+            device=str(MODEL_STATE["device"] or "unknown"),
+        )
+        log_event(
+            LOGGER,
+            "inference_failed",
+            request_id=request.state.request_id,
+            error_type=type(exc).__name__,
+            total_ms=round(total_ms, 3),
+        )
+        raise HTTPException(status_code=500, detail="model inference failed") from exc
+
+    total_ms = (time.perf_counter() - started) * 1000.0
+    timings = {
+        str(key): float(value)
+        for key, value in result.pop("_timings_ms", {}).items()
+    }
+    model = str(result.get("model") or MODEL_STATE["model"] or "unknown")
+    device = str(MODEL_STATE["device"] or "unknown")
+    TELEMETRY.record(
+        status="ok",
+        total_ms=total_ms,
+        stages_ms=timings,
+        model=model,
+        device=device,
+    )
+    log_event(
+        LOGGER,
+        "inference_completed",
+        request_id=request.state.request_id,
+        model=model,
+        device=device,
+        category=result.get("recommended_category"),
+        confidence=round(float(result.get("confidence", 0.0)), 6),
+        need_user_check=bool(result.get("need_user_check")),
+        total_ms=round(total_ms, 3),
+        stages_ms={key: round(value, 3) for key, value in timings.items()},
+    )
+    if env_enabled("CATAI_INCLUDE_PERFORMANCE_IN_RESPONSE"):
+        result["performance"] = {
+            "total_ms": total_ms,
+            "stages_ms": timings,
+            "device": device,
+        }
+    return result
 
 
 def main() -> None:

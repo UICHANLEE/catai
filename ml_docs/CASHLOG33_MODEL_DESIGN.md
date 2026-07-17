@@ -6,7 +6,7 @@ Taxonomy version: `13.33.1`
 
 ## 1. Decision
 
-The selected model family is `cashlog33-hybrid-v1`:
+The selected model family is `cashlog33-hybrid-v1.1-fast`:
 
 | Member | Role | Selected artifact |
 |---|---|---|
@@ -101,7 +101,7 @@ Response shape:
   ],
   "need_user_check": true,
   "error_code": "LOW_CONFIDENCE",
-  "model": "cashlog33-hybrid-v1",
+  "model": "cashlog33-hybrid-v1.1-fast",
   "engine": "siglip2+rapidocr+tfidf",
   "evidence": {
     "ocr": {"text": "...", "lines": []},
@@ -164,7 +164,7 @@ All gates must pass on one frozen, manually reviewed, leakage-controlled real-ph
 holdout:
 
 - At least 330 samples and at least 10 samples per each of 33 leaves.
-- Top-1 at least `0.80`; Top-3 at least `0.95`; macro F1 at least `0.75`.
+- Top-1 at least `0.95`; Top-3 at least `0.95`; macro F1 at least `0.75`.
 - Every leaf recall at least `0.60`.
 - 10-bin ECE at most `0.08`.
 - False auto-confirm rate at most `0.02`.

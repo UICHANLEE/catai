@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "model_version": "cashlog33-hybrid-v1",
+  "model_version": "cashlog33-hybrid-v1.1-fast",
   "taxonomy_version": "13.33.1",
   "categories": "categories.json",
   "semantics": "leaf_semantics.json",
@@ -18,6 +18,18 @@
   "ocr_classifier_model_sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
   "ocr_model": "../../models/rapidocr/korean_PP-OCRv5_rec_mobile.onnx",
   "ocr_model_sha256": "cd6e2ea50f6943ca7271eb8c56a877a5a90720b7047fe9c41a2e541a25773c9b",
+  "runtime": {
+    "parallel_vision_ocr": true,
+    "mps_float16": true,
+    "torch_cpu_threads": 4,
+    "ocr_max_side_len": 960,
+    "ocr_detection_side_len": 736,
+    "ocr_detection_limit_type": "min",
+    "ocr_use_cls": true,
+    "ocr_intra_op_threads": 6,
+    "ocr_inter_op_threads": 1,
+    "ocr_use_coreml": false
+  },
   "fusion": {
     "with_lexicon": {"vision": 0.25, "text": 0.60, "lexicon": 0.15},
     "without_lexicon": {"vision": 0.85, "text": 0.15, "lexicon": 0.0},

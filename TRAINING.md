@@ -36,6 +36,36 @@ Primary records:
 - `ml_docs/CASHLOG33_RUN_LOG.md`
 - `reports/cashlog33/model_report/index.html`
 
+## MPS target-95 run (2026-07-17)
+
+The UECFood meal specialist was initialized from the previous MobileNetV4
+checkpoint and retrained natively on Apple MPS. The old pipeline used both a
+balanced sampler and inverse-frequency loss weights, which double-corrected the
+minority class. The current trainer uses exactly one balancing mechanism.
+
+```bash
+.venv/bin/python scripts/launch_training.py cashlog_meal2_mps_target95
+```
+
+Verified fixed validation result over 4,249 images:
+
+| Scope | Epoch | Top-1 | Top-3 | Target |
+|---|---:|---:|---:|---:|
+| `meal_dining` / `meal_cafe` specialist | 2 | 98.05% | 100.00% | >=95% PASS |
+| 33-leaf synthetic integration | n/a | 98.99% | 98.99% | >=95% PASS |
+
+The first number is not 33-leaf or real-app accuracy. The 33-leaf number is an I/O
+integration fixture score, not a real-photo holdout. A model cannot be marked
+production-eligible until the manually labeled 33-leaf real holdout also reaches
+Top-1 95%.
+
+Monitoring locations:
+
+- `checkpoints/cashlog_meal2_mps_target95/progress.json`
+- `checkpoints/cashlog_meal2_mps_target95/training.jsonl`
+- `checkpoints/cashlog_meal2_mps_target95/metrics.csv`
+- MLflow experiment `cashlog33-mps-specialists`, run `meal2-mps-target95-v1`
+
 ## Historical UECFood experiments
 
 Historical standalone training target:

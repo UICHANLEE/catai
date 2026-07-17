@@ -16,7 +16,9 @@ import os
 import random
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import timm
 import torch
@@ -44,6 +46,32 @@ class Sample:
     label: int
     source_label: str
     bbox: tuple[int, int, int, int] | None
+
+
+class TrainingEventLog:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def emit(self, event: str, **fields: Any) -> None:
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": event,
+            **fields,
+        }
+        line = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str)
+        with self.path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+        print(line, flush=True)
+
+
+def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def load_categories(path: Path) -> list[dict]:
@@ -290,6 +318,14 @@ def class_weights(samples: list[Sample], num_classes: int) -> torch.Tensor:
     return torch.tensor([total / max(1, count) for count in counts], dtype=torch.float32)
 
 
+def loss_weights_for_training(
+    samples: list[Sample], num_classes: int, balanced_sampling: bool
+) -> torch.Tensor | None:
+    # A balanced sampler already corrects the class prior. Applying inverse-frequency
+    # loss weights at the same time over-corrects minority classes and hurts validation.
+    return None if balanced_sampling else class_weights(samples, num_classes)
+
+
 def balanced_sampler(samples: list[Sample], num_classes: int) -> WeightedRandomSampler:
     weights = class_weights(samples, num_classes)
     sample_weights = [float(weights[sample.label]) for sample in samples]
@@ -332,7 +368,15 @@ def log_mlflow_artifacts(output_dir: Path) -> None:
     except ImportError:
         return
 
-    for name in ["best.pt", "last.pt", "labels.json", "metrics.csv", "config.json"]:
+    for name in [
+        "best.pt",
+        "last.pt",
+        "labels.json",
+        "metrics.csv",
+        "config.json",
+        "progress.json",
+        "training.jsonl",
+    ]:
         path = output_dir / name
         if path.exists():
             mlflow.log_artifact(str(path))
@@ -368,6 +412,24 @@ def main() -> None:
     parser.add_argument("--mlflow-run-name", default=os.getenv("MLFLOW_RUN_NAME"))
     parser.add_argument("--disable-mlflow", action="store_true")
     parser.add_argument("--resume", type=Path)
+    parser.add_argument(
+        "--init-checkpoint",
+        type=Path,
+        help="Load model weights only and start a fresh optimizer/schedule.",
+    )
+    parser.add_argument(
+        "--init-label-map",
+        nargs="*",
+        default=[],
+        metavar="OLD=NEW",
+        help="Explicit label aliases for a weights-only initialization checkpoint.",
+    )
+    parser.add_argument("--target-top1", type=float, default=95.0)
+    parser.add_argument("--require-target", action="store_true")
+    parser.add_argument("--stop-on-target", action="store_true")
+    parser.add_argument("--minimum-epochs", type=int, default=5)
+    parser.add_argument("--early-stopping-patience", type=int, default=8)
+    parser.add_argument("--jsonl-log", type=Path)
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -431,12 +493,39 @@ def main() -> None:
 
     device = choose_device(args.device)
     model = build_model(resolved_arch, args.weights, len(trainable_categories), args.pretrained).to(device)
-    loss_weights = class_weights(train_samples, len(trainable_categories)).to(device)
+    balanced_sampling = sampler is not None
+    raw_loss_weights = loss_weights_for_training(
+        train_samples, len(trainable_categories), balanced_sampling
+    )
+    loss_weights = raw_loss_weights.to(device) if raw_loss_weights is not None else None
     criterion = nn.CrossEntropyLoss(weight=loss_weights, label_smoothing=args.label_smoothing)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(args.epochs, 1))
     start_epoch = 1
     best_top1 = -1.0
+
+    if args.init_checkpoint:
+        checkpoint = torch.load(args.init_checkpoint, map_location=device, weights_only=False)
+        checkpoint_categories = checkpoint.get("categories", [])
+        try:
+            init_label_map = dict(value.split("=", 1) for value in args.init_label_map)
+        except ValueError as exc:
+            raise SystemExit("--init-label-map values must use OLD=NEW") from exc
+        checkpoint_ids = [
+            init_label_map.get(category["id"], category["id"])
+            for category in checkpoint_categories
+        ]
+        trainable_ids = [category["id"] for category in trainable_categories]
+        if checkpoint_ids and checkpoint_ids != trainable_ids:
+            raise SystemExit(
+                f"init checkpoint labels do not match current labels: {checkpoint_ids} != {trainable_ids}"
+            )
+        checkpoint_arch = checkpoint.get("arch") or checkpoint.get("model_arch") or "mobilenetv4_conv_small"
+        if resolve_arch(checkpoint_arch) != resolved_arch:
+            raise SystemExit(
+                f"init checkpoint arch does not match current arch: {checkpoint_arch} != {resolved_arch}"
+            )
+        model.load_state_dict(checkpoint["model"], strict=True)
 
     if args.resume:
         checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
@@ -459,7 +548,15 @@ def main() -> None:
 
     (args.output_dir / "labels.json").write_text(json.dumps(trainable_categories, ensure_ascii=False, indent=2))
     config = vars(args).copy()
-    for key in ["dataset_root", "weights", "categories", "overrides", "output_dir"]:
+    for key in [
+        "dataset_root",
+        "weights",
+        "categories",
+        "overrides",
+        "output_dir",
+        "init_checkpoint",
+        "jsonl_log",
+    ]:
         config[key] = str(config[key]) if config[key] is not None else None
     config["resume"] = str(config["resume"]) if config["resume"] else None
     config["resolved_arch"] = resolved_arch
@@ -478,9 +575,35 @@ def main() -> None:
     print(f"cashlog_leaf_ids={[c['id'] for c in trainable_categories]}", flush=True)
     print(f"cashlog_categories={[c['display_name'] for c in trainable_categories]}", flush=True)
     print(f"train={len(train_samples)} val={len(val_samples)} counts={class_counts_by_id}", flush=True)
-    print("document_target=Top-1>=70 Top-3>=90 on Cashlog leaf category level", flush=True)
+    print(f"accuracy_target=validation Top-1>={args.target_top1:.2f}", flush=True)
 
     metrics_path = args.output_dir / "metrics.csv"
+    progress_path = args.output_dir / "progress.json"
+    event_log = TrainingEventLog(
+        args.jsonl_log or args.output_dir / "training.jsonl"
+    )
+    event_log.emit(
+        "training_started",
+        device=str(device),
+        mps_available=torch.backends.mps.is_available(),
+        architecture=resolved_arch,
+        target_top1=args.target_top1,
+        train_samples=len(train_samples),
+        validation_samples=len(val_samples),
+        class_counts=class_counts_by_id,
+        balanced_sampler=balanced_sampling,
+        class_weighted_loss=loss_weights is not None,
+    )
+    atomic_write_json(
+        progress_path,
+        {
+            "status": "running",
+            "device": str(device),
+            "target_top1": args.target_top1,
+            "best_top1": best_top1,
+            "epoch": start_epoch - 1,
+        },
+    )
     mlflow_run = maybe_start_mlflow_run(args)
     if mlflow_run is not None:
         import mlflow
@@ -500,12 +623,24 @@ def main() -> None:
                 "image_size": args.image_size,
                 "val_ratio": args.val_ratio,
                 "balanced_sampler": not args.no_balanced_sampler,
+                "class_weighted_loss": loss_weights is not None,
                 "trainable_leaf_ids": ",".join(category["id"] for category in trainable_categories),
+                "device": str(device),
+                "target_top1": args.target_top1,
+            }
+        )
+        mlflow.set_tags(
+            {
+                "accelerator": "mps" if device.type == "mps" else device.type,
+                "accuracy_scope": "uecfood-derived validation",
             }
         )
         mlflow.log_dict(class_counts_by_id, "class_counts.json")
 
     append_metrics = args.resume is not None and metrics_path.exists()
+    epochs_without_improvement = 0
+    last_epoch = start_epoch - 1
+    training_status = "running"
     with metrics_path.open("a" if append_metrics else "w", newline="") as f:
         writer = csv.DictWriter(
             f,
@@ -515,14 +650,18 @@ def main() -> None:
             writer.writeheader()
         try:
             for epoch in range(start_epoch, args.epochs + 1):
+                last_epoch = epoch
                 start = time.time()
                 print(f"\nepoch {epoch}/{args.epochs}", flush=True)
                 train_metrics = run_epoch(model, train_loader, criterion, optimizer, device, args.log_interval)
                 val_metrics = run_epoch(model, val_loader, criterion, None, device, 0)
                 scheduler.step()
                 elapsed = time.time() - start
-                improved = val_metrics["top1"] >= best_top1
+                improved = val_metrics["top1"] > best_top1
                 best_top1 = max(best_top1, val_metrics["top1"])
+                epochs_without_improvement = (
+                    0 if improved else epochs_without_improvement + 1
+                )
                 row = {
                     "epoch": epoch,
                     "train_loss": f"{train_metrics['loss']:.6f}",
@@ -568,10 +707,113 @@ def main() -> None:
                     f"best={best_top1:.2f} seconds={elapsed:.1f}",
                     flush=True,
                 )
-        finally:
+                target_met = best_top1 >= args.target_top1
+                mps_allocated_mb = (
+                    torch.mps.current_allocated_memory() / (1024 * 1024)
+                    if device.type == "mps"
+                    else None
+                )
+                event_log.emit(
+                    "epoch_completed",
+                    epoch=epoch,
+                    train=train_metrics,
+                    validation=val_metrics,
+                    best_top1=best_top1,
+                    target_top1=args.target_top1,
+                    target_met=target_met,
+                    improved=improved,
+                    seconds=elapsed,
+                    mps_allocated_mb=mps_allocated_mb,
+                )
+                atomic_write_json(
+                    progress_path,
+                    {
+                        "status": "target_met" if target_met else "running",
+                        "device": str(device),
+                        "epoch": epoch,
+                        "epochs": args.epochs,
+                        "best_top1": best_top1,
+                        "target_top1": args.target_top1,
+                        "target_met": target_met,
+                        "latest": {"train": train_metrics, "validation": val_metrics},
+                        "seconds": elapsed,
+                        "mps_allocated_mb": mps_allocated_mb,
+                    },
+                )
+                if target_met and args.stop_on_target and epoch >= args.minimum_epochs:
+                    training_status = "target_met"
+                    break
+                if (
+                    args.early_stopping_patience > 0
+                    and epoch >= args.minimum_epochs
+                    and epochs_without_improvement >= args.early_stopping_patience
+                ):
+                    training_status = "early_stopped"
+                    break
+            if training_status == "running":
+                training_status = "completed"
+        except BaseException as exc:
+            training_status = "failed"
+            atomic_write_json(
+                progress_path,
+                {
+                    "status": training_status,
+                    "device": str(device),
+                    "epoch": last_epoch,
+                    "best_top1": best_top1,
+                    "target_top1": args.target_top1,
+                    "target_met": best_top1 >= args.target_top1,
+                    "error_type": type(exc).__name__,
+                },
+            )
+            event_log.emit(
+                "training_failed",
+                epoch=last_epoch,
+                best_top1=best_top1,
+                target_top1=args.target_top1,
+                error_type=type(exc).__name__,
+            )
             if mlflow_run is not None:
+                mlflow.log_metric("target_met", float(best_top1 >= args.target_top1))
+                mlflow.set_tag("training_status", training_status)
                 log_mlflow_artifacts(args.output_dir)
-                mlflow.end_run()
+                mlflow.end_run(status="FAILED")
+            raise
+
+    target_met = best_top1 >= args.target_top1
+    target_gate_failed = args.require_target and not target_met
+    if target_gate_failed:
+        training_status = "target_not_met"
+    atomic_write_json(
+        progress_path,
+        {
+            "status": training_status,
+            "device": str(device),
+            "epoch": last_epoch,
+            "best_top1": best_top1,
+            "target_top1": args.target_top1,
+            "target_met": target_met,
+            "best_checkpoint": str(args.output_dir / "best.pt"),
+        },
+    )
+    event_log.emit(
+        "training_completed",
+        status=training_status,
+        epoch=last_epoch,
+        best_top1=best_top1,
+        target_top1=args.target_top1,
+        target_met=target_met,
+        best_checkpoint=str(args.output_dir / "best.pt"),
+    )
+    if mlflow_run is not None:
+        mlflow.log_metric("target_met", float(target_met))
+        mlflow.set_tag("training_status", training_status)
+        log_mlflow_artifacts(args.output_dir)
+        mlflow.end_run(status="FAILED" if target_gate_failed else "FINISHED")
+    if target_gate_failed:
+        raise SystemExit(
+            f"validation Top-1 target not met: best={best_top1:.4f} target={args.target_top1:.4f}"
+        )
 
 
 if __name__ == "__main__":

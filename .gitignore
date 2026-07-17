@@ -14,6 +14,7 @@ __pycache__/
 .DS_Store
 .superpowers/
 reports/*_smoke/
+.runtime/
 
 *.pt
 !src/catai/assets/cashlog_category_uecfood_mps/best.pt

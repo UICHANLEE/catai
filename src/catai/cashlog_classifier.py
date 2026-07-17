@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from PIL import Image, ImageFile
+from PIL import Image, ImageFile, ImageOps
 from torch import nn
 
 try:
@@ -74,10 +74,14 @@ def choose_device(name: str = "auto") -> torch.device:
 
 def _read_image(image: Image.Image | bytes | str | Path) -> Image.Image:
     if isinstance(image, Image.Image):
-        return image.convert("RGB")
+        return ImageOps.exif_transpose(image).convert("RGB")
     if isinstance(image, bytes):
-        return Image.open(io.BytesIO(image)).convert("RGB")
-    return Image.open(image).convert("RGB")
+        with Image.open(io.BytesIO(image)) as source:
+            source.load()
+            return ImageOps.exif_transpose(source).convert("RGB")
+    with Image.open(image) as source:
+        source.load()
+        return ImageOps.exif_transpose(source).convert("RGB")
 
 
 def crop_bbox(image: Image.Image, bbox: tuple[int, int, int, int], padding: float = 0.10) -> Image.Image:

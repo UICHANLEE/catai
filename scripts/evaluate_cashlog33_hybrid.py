@@ -47,6 +47,8 @@ def parse_args() -> argparse.Namespace:
         default="synthetic_integration",
     )
     parser.add_argument("--disable-mlflow", action="store_true")
+    parser.add_argument("--target-top1", type=float, default=0.95)
+    parser.add_argument("--require-target", action="store_true")
     return parser.parse_args()
 
 
@@ -90,6 +92,7 @@ def main() -> None:
         started = time.perf_counter()
         response = classifier.analyze(resolve_image_path(row))
         latency = time.perf_counter() - started
+        timings_ms = response.pop("_timings_ms", {})
         latencies.append(latency)
         top3 = [str(value["category"]) for value in response["top_categories"]]
         predictions.append(
@@ -104,11 +107,24 @@ def main() -> None:
                 "ocr_text": response["evidence"]["ocr"]["text"],
                 "matched_terms": response["evidence"]["matched_terms"],
                 "fallback_reasons": response["evidence"].get("fallback_reasons", []),
+                "timings_ms": timings_ms,
             }
         )
         print(
-            f"evaluated {index}/{len(rows)} expected={row['leaf_id']} "
-            f"predicted={response['recommended_category']} check={response['need_user_check']}",
+            json.dumps(
+                {
+                    "event": "evaluation_sample_completed",
+                    "sample": index,
+                    "samples": len(rows),
+                    "expected": row["leaf_id"],
+                    "predicted": response["recommended_category"],
+                    "need_user_check": response["need_user_check"],
+                    "latency_ms": latency * 1000.0,
+                    "timings_ms": timings_ms,
+                },
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
             flush=True,
         )
 
@@ -138,13 +154,34 @@ def main() -> None:
         (float(report[leaf_id]["recall"]) for leaf_id in category_ids if support_by_leaf[leaf_id]),
         default=0.0,
     )
+    top1_accuracy = float(accuracy_score(actual, predicted))
+    stage_names = sorted(
+        {name for row in predictions for name in row.get("timings_ms", {})}
+    )
+    stage_latency = {
+        name: {
+            "p50_ms": float(
+                np.percentile(
+                    [row["timings_ms"][name] for row in predictions if name in row["timings_ms"]],
+                    50,
+                )
+            ),
+            "p95_ms": float(
+                np.percentile(
+                    [row["timings_ms"][name] for row in predictions if name in row["timings_ms"]],
+                    95,
+                )
+            ),
+        }
+        for name in stage_names
+    }
     metrics = {
         "schema_version": 1,
         "generated_at": utc_now(),
         "samples": len(predictions),
         "leaf_count": len(set(actual)),
         "minimum_per_leaf": min(support_by_leaf.values()),
-        "top1_accuracy": float(accuracy_score(actual, predicted)),
+        "top1_accuracy": top1_accuracy,
         "top3_accuracy": float(top3_accuracy),
         "macro_f1": float(
             f1_score(actual, predicted, labels=category_ids, average="macro", zero_division=0)
@@ -161,6 +198,10 @@ def main() -> None:
         "latency_p50_seconds": float(np.percentile(latencies, 50)),
         "latency_p95_seconds": float(np.percentile(latencies, 95)),
         "dataset_scope": args.dataset_scope,
+        "device": str(classifier.device),
+        "target_top1": args.target_top1,
+        "target_met": top1_accuracy >= args.target_top1,
+        "stage_latency": stage_latency,
         "safe_fallback_rate": float(
             sum(bool(row["fallback_reasons"]) for row in predictions) / len(predictions)
         ),
@@ -216,6 +257,8 @@ def main() -> None:
                     "samples": len(predictions),
                     "leaf_count": len(set(actual)),
                     "dataset_scope": args.dataset_scope,
+                    "device": str(classifier.device),
+                    "target_top1": args.target_top1,
                 }
             )
             mlflow.log_metrics(
@@ -227,11 +270,17 @@ def main() -> None:
                     "e2e_latency_p95": metrics["latency_p95_seconds"],
                     "e2e_ece_10_bin": metrics["ece_10_bin"],
                     "e2e_minimum_leaf_recall": metrics["minimum_leaf_recall"],
+                    "e2e_target_met": float(metrics["target_met"]),
                 }
             )
             for path in [metrics_path, predictions_path, per_class_path, confusion_path]:
                 mlflow.log_artifact(str(path))
     print(json.dumps(metrics, ensure_ascii=False, indent=2), flush=True)
+    if args.require_target and not metrics["target_met"]:
+        raise SystemExit(
+            f"Top-1 target not met for {args.dataset_scope}: "
+            f"actual={metrics['top1_accuracy']:.6f} required={args.target_top1:.6f}"
+        )
 
 
 if __name__ == "__main__":

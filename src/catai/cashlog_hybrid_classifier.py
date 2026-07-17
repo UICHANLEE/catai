@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import time
 import unicodedata
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +29,16 @@ class CashlogHybridClassifier:
         self.config_path = Path(config_path).resolve()
         self.config = json.loads(self.config_path.read_text(encoding="utf-8"))
         self.device = choose_device(device)
+        self.runtime = dict(self.config.get("runtime", {}))
+        self.parallel_inference = bool(self.runtime.get("parallel_vision_ocr", True))
+        self._executor = (
+            ThreadPoolExecutor(max_workers=2, thread_name_prefix="cashlog-infer")
+            if self.parallel_inference
+            else None
+        )
+        torch.set_float32_matmul_precision("high")
+        if self.device.type == "cpu" and self.runtime.get("torch_cpu_threads"):
+            torch.set_num_threads(int(self.runtime["torch_cpu_threads"]))
         self.categories = self._load_json_path("categories")
         self.semantics = self._load_json_path("semantics")
         self.ocr_lexicon = self._load_json_path("ocr_lexicon")
@@ -49,9 +61,13 @@ class CashlogHybridClassifier:
         self._verify_file(self.ocr_classifier_model_path, "ocr_classifier_model_sha256")
         self._verify_file(self.ocr_model_path, "ocr_model_sha256")
 
+        use_mps_fp16 = self.device.type == "mps" and bool(
+            self.runtime.get("mps_float16", False)
+        )
+        self.vision_dtype = torch.float16 if use_mps_fp16 else torch.float32
         self.vision_model = AutoModel.from_pretrained(
             self.vision_model_path, local_files_only=True
-        ).to(self.device).eval()
+        ).to(device=self.device, dtype=self.vision_dtype).eval()
         self.vision_processor = AutoProcessor.from_pretrained(
             self.vision_model_path, local_files_only=True, use_fast=True
         )
@@ -74,12 +90,25 @@ class CashlogHybridClassifier:
 
         self.ocr = RapidOCR(
             params={
+                "Global.max_side_len": int(self.runtime.get("ocr_max_side_len", 1280)),
+                "Global.use_cls": bool(self.runtime.get("ocr_use_cls", True)),
                 "Det.model_path": str(self.ocr_detector_model_path),
+                "Det.limit_side_len": int(self.runtime.get("ocr_detection_side_len", 960)),
+                "Det.limit_type": str(self.runtime.get("ocr_detection_limit_type", "max")),
                 "Cls.model_path": str(self.ocr_classifier_model_path),
                 "Rec.lang_type": LangRec.KOREAN,
                 "Rec.ocr_version": OCRVersion.PPOCRV5,
                 "Rec.model_type": ModelType.MOBILE,
                 "Rec.model_path": str(self.ocr_model_path),
+                "EngineConfig.onnxruntime.intra_op_num_threads": int(
+                    self.runtime.get("ocr_intra_op_threads", 2)
+                ),
+                "EngineConfig.onnxruntime.inter_op_num_threads": int(
+                    self.runtime.get("ocr_inter_op_threads", 1)
+                ),
+                "EngineConfig.onnxruntime.use_coreml": bool(
+                    self.runtime.get("ocr_use_coreml", False)
+                ),
             }
         )
 
@@ -147,10 +176,19 @@ class CashlogHybridClassifier:
             truncation=True,
             return_tensors="pt",
         )
-        inputs = {key: value.to(self.device) for key, value in inputs.items()}
+        inputs = self._move_vision_inputs(inputs)
         with torch.inference_mode():
             features = self._feature_tensor(self.vision_model.get_text_features(**inputs))
         return F.normalize(features.float(), dim=-1)
+
+    def _move_vision_inputs(self, inputs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        return {
+            key: value.to(
+                device=self.device,
+                dtype=self.vision_dtype if value.is_floating_point() else value.dtype,
+            )
+            for key, value in inputs.items()
+        }
 
     @staticmethod
     def _normalize(values: dict[str, float], leaf_ids: list[str]) -> dict[str, float]:
@@ -164,7 +202,7 @@ class CashlogHybridClassifier:
 
     def _vision_scores(self, image: Image.Image) -> dict[str, float]:
         inputs = self.vision_processor(images=[image], return_tensors="pt")
-        inputs = {key: value.to(self.device) for key, value in inputs.items()}
+        inputs = self._move_vision_inputs(inputs)
         with torch.inference_mode():
             image_features = self._feature_tensor(self.vision_model.get_image_features(**inputs))
             image_features = F.normalize(image_features.float(), dim=-1)
@@ -204,6 +242,7 @@ class CashlogHybridClassifier:
         result = self.ocr(np.asarray(image))
         texts = list(result.txts or [])
         scores = [float(value) for value in (result.scores or [])]
+        engine_elapsed = list(getattr(result, "elapse_list", None) or [])
         threshold = float(self.config["decision"]["ocr_min_line_score"])
         accepted = [
             (str(text).strip(), score)
@@ -216,6 +255,13 @@ class CashlogHybridClassifier:
             "mean_confidence": (
                 sum(score for _, score in accepted) / len(accepted) if accepted else 0.0
             ),
+            "engine_timings_ms": {
+                name: float(engine_elapsed[index]) * 1000.0
+                for index, name in enumerate(
+                    ["ocr_detection", "ocr_classification", "ocr_recognition"]
+                )
+                if index < len(engine_elapsed)
+            },
         }
 
     @staticmethod
@@ -349,10 +395,25 @@ class CashlogHybridClassifier:
         return self._normalize(fused, self.leaf_ids), weights
 
     def infer(self, image: Image.Image | bytes | str | Path) -> dict[str, Any]:
+        total_started = time.perf_counter()
         pil_image = _read_image(image)
+        decode_finished = time.perf_counter()
         image_quality = self._image_quality(pil_image)
-        vision = self._vision_scores(pil_image)
-        ocr = self._extract_ocr(pil_image)
+        quality_finished = time.perf_counter()
+
+        if self._executor is not None:
+            vision_started = time.perf_counter()
+            vision_future = self._executor.submit(self._timed_call, self._vision_scores, pil_image)
+            ocr_future = self._executor.submit(self._timed_call, self._extract_ocr, pil_image)
+            vision, vision_ms = vision_future.result()
+            ocr, ocr_ms = ocr_future.result()
+            parallel_ms = (time.perf_counter() - vision_started) * 1000.0
+        else:
+            vision, vision_ms = self._timed_call(self._vision_scores, pil_image)
+            ocr, ocr_ms = self._timed_call(self._extract_ocr, pil_image)
+            parallel_ms = vision_ms + ocr_ms
+
+        fusion_started = time.perf_counter()
         text = self._text_scores(str(ocr["text"]))
         lexicon, matched_terms = self._lexicon_scores(str(ocr["text"]))
         fused, weights = self._fuse(vision, text, lexicon, matched_terms)
@@ -368,6 +429,12 @@ class CashlogHybridClassifier:
             or ranked[0][1] < float(decision["auto_confirm_threshold"])
             or margin < float(decision["minimum_margin"])
         )
+        fusion_ms = (time.perf_counter() - fusion_started) * 1000.0
+        total_ms = (time.perf_counter() - total_started) * 1000.0
+        ocr_engine_timings = {
+            str(key): float(value)
+            for key, value in ocr.get("engine_timings_ms", {}).items()
+        }
         return {
             "ranked": ranked,
             "margin": margin,
@@ -380,7 +447,23 @@ class CashlogHybridClassifier:
             "image_quality": image_quality,
             "fallback_reasons": fallback_reasons,
             "fusion_weights": weights,
+            "timings_ms": {
+                "decode": (decode_finished - total_started) * 1000.0,
+                "quality": (quality_finished - decode_finished) * 1000.0,
+                "vision": vision_ms,
+                "ocr": ocr_ms,
+                **ocr_engine_timings,
+                "parallel_vision_ocr": parallel_ms,
+                "fusion": fusion_ms,
+                "inference_total": total_ms,
+            },
         }
+
+    @staticmethod
+    def _timed_call(function: Any, *args: Any) -> tuple[Any, float]:
+        started = time.perf_counter()
+        value = function(*args)
+        return value, (time.perf_counter() - started) * 1000.0
 
     def predict(
         self, image: Image.Image | bytes | str | Path, top_k: int = 3, **_: Any
@@ -457,6 +540,7 @@ class CashlogHybridClassifier:
                 ],
                 "decision_margin": float(result["margin"]),
             },
+            "_timings_ms": result["timings_ms"],
         }
         if result["need_user_check"]:
             response["error_code"] = "LOW_CONFIDENCE"
