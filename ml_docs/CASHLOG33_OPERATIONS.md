@@ -140,6 +140,11 @@ Every inference emits a request ID, model version, device, category, confidence,
 review flag, total latency, and stage latencies. The in-memory `/metrics` window is
 bounded to 1,000 requests by default and resets on process restart.
 
+For the public CashLog route, correlate the response `X-Request-ID` with
+`model-api.jsonl`. `X-Cashlog-Read-Time-Ms`, `X-Cashlog-Optimize-Time-Ms`,
+`X-Cashlog-Analyzer-Time-Ms`, and `X-Cashlog-Total-Time-Ms` separate Vercel work
+from model latency without logging image or OCR contents.
+
 Retraining is triggered by a reviewed data release, sustained per-leaf correction
 drift, or a planned model change. It is not triggered automatically from unreviewed
 user corrections.

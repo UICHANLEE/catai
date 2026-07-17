@@ -281,3 +281,32 @@ artifact and is not evidence of 33-leaf real-photo accuracy.
 Observability is available through protected `GET /metrics`, response headers
 `X-Request-ID` and `X-Process-Time-Ms`, `logs/model-api.jsonl`, MLflow experiment
 `cashlog33-mps-specialists`, and per-run `progress.json`/`training.jsonl` files.
+
+## 13. Public Path Latency Remediation (2026-07-17)
+
+The model worker was not the main source of the multi-second app delay. A repeated
+2.65 MiB PNG request through the original Vercel `iad1` function and Quick Tunnel
+took 5.30 to 6.32 seconds, while the same image on the local MPS worker took about
+0.35 seconds. A direct authenticated Quick Tunnel request took 0.74 to 1.12 seconds.
+
+CashLog now runs only the analyzer and analyzer-status functions in Vercel `icn1`,
+re-encodes large upstream images to a maximum 1280px JPEG, and performs the same
+best-effort reduction in the browser before upload. The server keeps the validated
+original when optimization is unavailable or does not reduce size. The 2.65 MiB
+canary was reduced to 226 KiB before the Galaxy hop without changing its
+`meal_cafe` result.
+
+| Public measurement | Before | After |
+|---|---:|---:|
+| Original 2.65 MiB request | 5.30-6.32s | 2.98-3.69s |
+| Pre-compressed 424 KiB request | 3.30-3.54s on `iad1` | 1.71-2.15s on `icn1` |
+| Model stage inside final request | not correlated | 0.34-0.39s |
+
+The deployed client bundle contains the browser-side compressor. Vercel responses
+include `X-Cashlog-Read-Time-Ms`, `X-Cashlog-Optimize-Time-Ms`,
+`X-Cashlog-Analyzer-Time-Ms`, `X-Cashlog-Total-Time-Ms`, byte counts, and the same
+`X-Request-ID` forwarded through Galaxy to `logs/model-api.jsonl`. Vercel also emits
+an `image_analysis_completed` JSON event without image, OCR, or secret contents.
+
+These results validate the current test route only. The ephemeral Quick Tunnel
+still must be replaced by a named, policy-controlled tunnel before production.
