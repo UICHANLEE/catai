@@ -59,8 +59,15 @@ Open the loopback-only reverse tunnel:
 GALAXY_SSH_USER=u0_a123 \
 GALAXY_SSH_HOST=<galaxy-tailscale-name-or-ip> \
 GALAXY_SSH_PORT=8022 \
+GALAXY_SSH_IDENTITY=~/.ssh/id_ed25519_cashlog_galaxy \
 bash scripts/open_phone_reverse_tunnel.sh
 ```
+
+For unattended macOS reconnection, render
+`deploy/macos/com.cashlog.model-tunnel.plist.example` with the local SSH key,
+Galaxy Tailscale host, and loopback ports, then install it as the user
+LaunchAgent `com.cashlog.model-tunnel`. The SSH process stays in the foreground
+for `launchd`; it must not use `-f`.
 
 Galaxy `127.0.0.1:18010` now reaches Mac `127.0.0.1:8010`. It must not be
 reachable through the Galaxy Wi-Fi or Tailscale address because `GatewayPorts`
@@ -90,7 +97,12 @@ The included `run_gateway.sh`, `start_gateway.sh`, and `stop_gateway.sh` read
 the two secrets from mode-`600` files instead of command-line arguments. They
 also acquire a Termux wake lock and keep the process ID and logs under private
 runtime/state directories. `GATEWAY_BIND_HOST` remains `127.0.0.1` until the
-Tailscale address and ACL are ready.
+Tailscale address and ACL are ready. For persistent Tailscale-only binding, put
+the Galaxy `100.x` address in the mode-`600` file
+`~/.config/cashlog-gateway/bind-host`; no address is baked into the repository.
+An alternate loopback reverse-tunnel port can be persisted in the same way by
+writing its full URL, for example `http://127.0.0.1:18012`, to the mode-`600`
+file `~/.config/cashlog-gateway/model-base-url`.
 
 Termux Python 3.13 currently supplies its Android-compatible Pydantic build as
 a platform package. Create the gateway environment with

@@ -189,8 +189,8 @@ Deployment-specific operator actions still required:
    `PRODUCT_ANALYZER_API_KEY`; never place it in React Native or a `VITE_` variable.
 2. Create Jenkins credential `airflow-local-basic` and a Pipeline job using
    `Jenkinsfile`.
-3. Install and enable the official Android Tailscale app, then apply the documented
-   ACL after the Galaxy and backend node identities are available.
+3. Add the actual Backend/Home Server as a Tailnet node and apply the documented
+   ACL. The current Tailnet contains only the Mac model worker and Galaxy relay.
 4. Replace the local Airflow bootstrap `admin/admin` before any non-loopback use.
 
 ## 10. Galaxy Deployment Verification
@@ -223,12 +223,24 @@ Deployment checks:
 | Warm end-to-end relay latency | 2.01 seconds |
 | Galaxy LAN ports 8000 and 18010 | connection refused |
 | Direct Cloudflare Quick Tunnel | stopped |
+| Galaxy Tailscale-only gateway bind | authenticated HTTP 200; unauthenticated 401 |
+| macOS reverse-tunnel LaunchAgent | running; automatic restart verified |
+| Obsolete reverse tunnels | removed; only managed loopback tunnel remains |
+| Final Tailscale image E2E | `meal_cafe`, confidence 0.8143, 2.28 seconds |
 
-The Galaxy relay is currently bound to `127.0.0.1:8000`. This is intentionally
-private and working locally, but external Backend-to-Galaxy traffic remains blocked
-until the official Android Tailscale app is installed, a `100.x` node address is
-assigned, and an ACL allows only the Backend identity to the relay. The removed
-Quick Tunnel must not be restarted as a production substitute.
+The Galaxy relay is bound only to its assigned Tailscale IPv4 address. The same
+port on the Wi-Fi/LAN address refuses connections. A macOS user LaunchAgent keeps
+the reverse tunnel alive over the Galaxy Tailscale address; forced restart changed
+the SSH process and recovered model health to HTTP 200 automatically. Both the
+gateway bind and selected loopback model URL are stored in owner-only runtime files,
+not in the repository.
+
+The private Mac-to-Galaxy model path is complete. The public mobile application path
+is not yet complete because the Tailnet has no separate Backend/Home Server node.
+React Native must not receive the Galaxy address or gateway key. A backend must join
+the Tailnet and call the relay, or a JWT-validating backend must run on the Galaxy
+behind a named Cloudflare Tunnel. The removed Quick Tunnel must not be restarted as
+a production substitute.
 
 ## 11. Monitoring Locations
 

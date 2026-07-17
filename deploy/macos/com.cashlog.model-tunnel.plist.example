@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cashlog.model-tunnel</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/ssh</string>
+    <string>-N</string>
+    <string>-T</string>
+    <string>-i</string>
+    <string>__SSH_IDENTITY__</string>
+    <string>-p</string>
+    <string>__SSH_PORT__</string>
+    <string>-o</string>
+    <string>BatchMode=yes</string>
+    <string>-o</string>
+    <string>IdentitiesOnly=yes</string>
+    <string>-o</string>
+    <string>ExitOnForwardFailure=yes</string>
+    <string>-o</string>
+    <string>ServerAliveInterval=30</string>
+    <string>-o</string>
+    <string>ServerAliveCountMax=3</string>
+    <string>-o</string>
+    <string>StrictHostKeyChecking=yes</string>
+    <string>-R</string>
+    <string>127.0.0.1:__GALAXY_TUNNEL_PORT__:127.0.0.1:__MAC_MODEL_PORT__</string>
+    <string>__SSH_USER__@__GALAXY_TAILSCALE_HOST__</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>NetworkState</key>
+    <true/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/model-tunnel.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/model-tunnel.err.log</string>
+</dict>
+</plist>
