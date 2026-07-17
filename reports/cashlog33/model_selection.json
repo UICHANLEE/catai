@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T20:04:56.264979+00:00",
+  "selected_candidate": "cashlog33-hybrid-v1",
+  "serving_config": "configs/cashlog/hybrid.serving.json",
+  "decision": "guarded_integration_candidate",
+  "integration_ready": true,
+  "production_eligible": false,
+  "auto_confirm_enabled": false,
+  "decision_note": "The hybrid is selected for guarded Top-3 recommendation serving. Auto-confirm stays disabled until the frozen real-photo holdout passes every production gate.",
+  "orchestration": {
+    "airflow_dag_id": null,
+    "airflow_dag_run_id": null
+  },
+  "thresholds": {
+    "minimum_samples": 330,
+    "minimum_per_leaf": 10,
+    "top1_accuracy": 0.8,
+    "top3_accuracy": 0.95,
+    "macro_f1": 0.75,
+    "minimum_leaf_recall": 0.6,
+    "maximum_ece": 0.08,
+    "maximum_false_auto_confirm_rate": 0.02,
+    "maximum_latency_p95_seconds": 3.0
+  },
+  "gates": [
+    {
+      "name": "taxonomy_leaf_count",
+      "passed": true,
+      "actual": 33,
+      "required": 33,
+      "scope": "contract"
+    },
+    {
+      "name": "artifact_sha256",
+      "passed": true,
+      "actual": true,
+      "required": true,
+      "scope": "supply-chain"
+    },
+    {
+      "name": "vision_head_beats_zero_shot_top1",
+      "passed": true,
+      "actual": 0.7926829268292683,
+      "required": "> 0.5975609756097561",
+      "scope": "Open Images proxy"
+    },
+    {
+      "name": "synthetic_33_leaf_coverage",
+      "passed": true,
+      "actual": 33,
+      "required": 33,
+      "scope": "synthetic I/O"
+    },
+    {
+      "name": "synthetic_top3",
+      "passed": true,
+      "actual": 0.98989898989899,
+      "required": ">= 0.90",
+      "scope": "synthetic I/O"
+    },
+    {
+      "name": "synthetic_false_auto_confirm",
+      "passed": true,
+      "actual": 0.0,
+      "required": "<= 0.02",
+      "scope": "synthetic I/O"
+    },
+    {
+      "name": "synthetic_latency_p95",
+      "passed": true,
+      "actual": 0.37764707116875773,
+      "required": "<= 3.0",
+      "scope": "local CPU synthetic I/O"
+    },
+    {
+      "name": "real_cashlog_holdout",
+      "passed": false,
+      "actual": "missing",
+      "required": "frozen manual set: >=10 photos x 33 leaves",
+      "scope": "real holdout"
+    }
+  ],
+  "artifact_sha256": {
+    "vision_model": "612923381c76ec5a9bed335d1c48827e3f2e506ac31b044b63b2031fadee6a0b",
+    "vision_head": "ac08fd9c6d8e07193b8a48848ff01e98ada120cca620274673da59f708efb28b",
+    "text_model": "3fb1ce9d6410e4a928db6f61919864f64ca00db93fdb3d345a40b60083d92f13",
+    "ocr_detector_model": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+    "ocr_classifier_model": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+    "ocr_model": "cd6e2ea50f6943ca7271eb8c56a877a5a90720b7047fe9c41a2e541a25773c9b"
+  },
+  "evidence": {
+    "vision_metrics": "checkpoints/cashlog33/vision_head_v1/metrics.json",
+    "text_metrics": "checkpoints/cashlog33/text_sgd_v2/metrics.json",
+    "e2e_metrics": "reports/cashlog33/hybrid_e2e/metrics.json",
+    "real_holdout_metrics": null,
+    "text_test_scope": "synthetic/weak proxy only; not a real CashLog production holdout",
+    "e2e_scope": "Synthetic rendered receipts validate I/O and 33-leaf routing only."
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "model_version": "cashlog33-hybrid-airflow-latest",
+  "taxonomy_version": "13.33.1",
+  "categories": "categories.json",
+  "semantics": "leaf_semantics.json",
+  "ocr_lexicon": "ocr_lexicon.json",
+  "vision_model": "../../models/siglip2-base-patch16-224",
+  "vision_model_sha256": "612923381c76ec5a9bed335d1c48827e3f2e506ac31b044b63b2031fadee6a0b",
+  "vision_head": "../../checkpoints/cashlog33/airflow_latest/vision/vision_head.joblib",
+  "vision_head_sha256": "29b44352c10d1d25a33fc4279f3cce52414fa96f19d933db8be472e5728ed807",
+  "vision_blend": {
+    "zero_shot": 0.3,
+    "linear_head": 0.7
+  },
+  "text_model": "../../checkpoints/cashlog33/airflow_latest/text/text_model.joblib",
+  "text_model_sha256": "573399b52c91a8497a6bc0ed41b185c3297120044d5bdd6b8150389e9f4b2535",
+  "ocr_detector_model": "../../models/rapidocr/PP-OCRv6_det_small.onnx",
+  "ocr_detector_model_sha256": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+  "ocr_classifier_model": "../../models/rapidocr/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+  "ocr_classifier_model_sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+  "ocr_model": "../../models/rapidocr/korean_PP-OCRv5_rec_mobile.onnx",
+  "ocr_model_sha256": "cd6e2ea50f6943ca7271eb8c56a877a5a90720b7047fe9c41a2e541a25773c9b",
+  "fusion": {
+    "with_lexicon": {
+      "vision": 0.25,
+      "text": 0.6,
+      "lexicon": 0.15
+    },
+    "without_lexicon": {
+      "vision": 0.85,
+      "text": 0.15,
+      "lexicon": 0.0
+    },
+    "agreement_bonus": 0.1
+  },
+  "decision": {
+    "allow_auto_confirm": false,
+    "auto_confirm_threshold": 0.65,
+    "minimum_margin": 0.15,
+    "ocr_min_line_score": 0.5,
+    "semantic_fallback_threshold": 0.25,
+    "fallback_confidence": 0.55,
+    "generic_receipt_min_terms": 2,
+    "generic_receipt_terms": [
+      "영수증",
+      "결제",
+      "승인번호",
+      "공급가액",
+      "부가세",
+      "결제금액",
+      "신용카드"
+    ],
+    "low_information_laplacian_variance": 100.0,
+    "low_information_grayscale_std": 15.0
+  },
+  "generated_at": "2026-07-16T20:04:25.075666+00:00",
+  "source_template": "hybrid.serving.json"
+}

@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import time
 from dataclasses import dataclass
@@ -28,6 +29,13 @@ from torchvision import transforms
 
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_MOBILENETV4_WEIGHTS = ROOT / "models/classification/mobilenetv4_conv_small.e2400_r224_in1k.safetensors"
+ARCH_ALIASES = {
+    "mobilenetv4": "mobilenetv4_conv_small",
+    "mobilenetv4_conv_small": "mobilenetv4_conv_small",
+    "efficientnet_b0": "efficientnet_b0",
+    "convnext_tiny": "convnext_tiny",
+}
 
 
 @dataclass(frozen=True)
@@ -72,13 +80,20 @@ def read_bboxes(class_dir: Path) -> dict[str, tuple[int, int, int, int]]:
 
 def infer_cashlog_category(name: str, overrides: dict) -> str:
     lowered = name.lower()
-    for keyword in overrides["cafe_snack_keywords"]:
+    for rule in overrides.get("leaf_keyword_rules", []):
+        leaf_id = rule["leaf_id"]
+        for keyword in rule.get("keywords", []):
+            if keyword in lowered:
+                return leaf_id
+
+    # Backward compatible support for the old two-label mapping file.
+    for keyword in overrides.get("cafe_snack_keywords", []):
         if keyword in lowered:
-            return "cafe_snack"
-    for keyword in overrides["food_keywords"]:
+            return "meal_cafe"
+    for keyword in overrides.get("food_keywords", []):
         if keyword in lowered:
-            return "food"
-    return "food"
+            return "meal_dining"
+    return overrides.get("default_leaf_id", "meal_dining")
 
 
 def crop_bbox(image: Image.Image, bbox: tuple[int, int, int, int], padding: float) -> Image.Image:
@@ -195,10 +210,22 @@ def choose_device(name: str) -> torch.device:
     return torch.device("cpu")
 
 
-def build_model(weights_path: Path, num_classes: int) -> nn.Module:
-    model = timm.create_model("mobilenetv4_conv_small", pretrained=False, num_classes=1000)
-    model.load_state_dict(load_file(str(weights_path)), strict=True)
-    model.reset_classifier(num_classes)
+def resolve_arch(name: str) -> str:
+    if name not in ARCH_ALIASES:
+        choices = ", ".join(sorted(ARCH_ALIASES))
+        raise SystemExit(f"unsupported arch: {name}. available: {choices}")
+    return ARCH_ALIASES[name]
+
+
+def build_model(arch: str, weights_path: Path | None, num_classes: int, pretrained: bool) -> nn.Module:
+    model_name = resolve_arch(arch)
+    if weights_path is not None:
+        model = timm.create_model(model_name, pretrained=False, num_classes=1000)
+        state_dict = load_file(str(weights_path)) if weights_path.suffix == ".safetensors" else torch.load(weights_path, map_location="cpu")
+        model.load_state_dict(state_dict, strict=True)
+        model.reset_classifier(num_classes)
+        return model
+    model = timm.create_model(model_name, pretrained=pretrained, num_classes=num_classes)
     return model
 
 
@@ -269,10 +296,54 @@ def balanced_sampler(samples: list[Sample], num_classes: int) -> WeightedRandomS
     return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
 
 
+def remap_samples(samples: list[Sample], index_remap: dict[int, int]) -> list[Sample]:
+    return [
+        Sample(
+            path=sample.path,
+            label=index_remap[sample.label],
+            source_label=sample.source_label,
+            bbox=sample.bbox,
+        )
+        for sample in samples
+        if sample.label in index_remap
+    ]
+
+
+def maybe_start_mlflow_run(args: argparse.Namespace):
+    if args.disable_mlflow:
+        return None
+    if not args.mlflow_tracking_uri:
+        return None
+
+    try:
+        import mlflow
+    except ImportError as exc:
+        raise RuntimeError("MLflow logging requested, but mlflow is not installed.") from exc
+
+    mlflow.set_tracking_uri(args.mlflow_tracking_uri)
+    mlflow.set_experiment(args.mlflow_experiment)
+    run_name = args.mlflow_run_name or f"cashlog-category-{int(time.time())}"
+    return mlflow.start_run(run_name=run_name)
+
+
+def log_mlflow_artifacts(output_dir: Path) -> None:
+    try:
+        import mlflow
+    except ImportError:
+        return
+
+    for name in ["best.pt", "last.pt", "labels.json", "metrics.csv", "config.json"]:
+        path = output_dir / name
+        if path.exists():
+            mlflow.log_artifact(str(path))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-root", type=Path, default=ROOT / "data/processed/classification/uecfood256/UECFOOD256")
-    parser.add_argument("--weights", type=Path, default=ROOT / "models/classification/mobilenetv4_conv_small.e2400_r224_in1k.safetensors")
+    parser.add_argument("--arch", default="mobilenetv4_conv_small", choices=sorted(ARCH_ALIASES))
+    parser.add_argument("--weights", type=Path)
+    parser.add_argument("--pretrained", action="store_true", help="Ask timm to load pretrained weights. Requires network/cache when weights are not supplied.")
     parser.add_argument("--categories", type=Path, default=ROOT / "configs/cashlog/categories.json")
     parser.add_argument("--overrides", type=Path, default=ROOT / "configs/cashlog/uecfood_category_overrides.json")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "checkpoints/cashlog_category_uecfood_mobilenetv4")
@@ -290,25 +361,55 @@ def main() -> None:
     parser.add_argument("--max-samples-per-uec-class", type=int)
     parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument("--no-balanced-sampler", action="store_true")
+    parser.add_argument("--trainable-leaf-ids", nargs="*", help="Cashlog leaf ids to train. Defaults to leaves with available samples.")
+    parser.add_argument("--min-samples-per-leaf", type=int, default=2)
+    parser.add_argument("--mlflow-tracking-uri", default=os.getenv("MLFLOW_TRACKING_URI"))
+    parser.add_argument("--mlflow-experiment", default=os.getenv("MLFLOW_EXPERIMENT_NAME", "catai-cashlog-category"))
+    parser.add_argument("--mlflow-run-name", default=os.getenv("MLFLOW_RUN_NAME"))
+    parser.add_argument("--disable-mlflow", action="store_true")
+    parser.add_argument("--resume", type=Path)
     args = parser.parse_args()
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_arch = resolve_arch(args.arch)
+    if args.weights is None and resolved_arch == "mobilenetv4_conv_small" and DEFAULT_MOBILENETV4_WEIGHTS.exists():
+        args.weights = DEFAULT_MOBILENETV4_WEIGHTS
 
     all_categories = load_categories(args.categories)
-    trainable_ids = ["food", "cafe_snack"]
-    trainable_categories = [c for c in all_categories if c["id"] in trainable_ids]
-    label_to_index = {category["id"]: i for i, category in enumerate(trainable_categories)}
+    all_label_to_index = {category["id"]: i for i, category in enumerate(all_categories)}
     overrides = json.loads(args.overrides.read_text())
 
-    samples = collect_samples(
+    all_samples = collect_samples(
         args.dataset_root,
-        label_to_index=label_to_index,
+        label_to_index=all_label_to_index,
         overrides=overrides,
         max_samples_per_class=args.max_samples_per_uec_class,
         use_bbox=True,
     )
+    all_class_counts: dict[int, int] = {}
+    for sample in all_samples:
+        all_class_counts[sample.label] = all_class_counts.get(sample.label, 0) + 1
+
+    if args.trainable_leaf_ids:
+        selected_ids = args.trainable_leaf_ids
+    else:
+        selected_ids = [
+            category["id"]
+            for index, category in enumerate(all_categories)
+            if all_class_counts.get(index, 0) >= args.min_samples_per_leaf
+        ]
+    selected_ids = [leaf_id for leaf_id in selected_ids if leaf_id in all_label_to_index]
+    if len(selected_ids) < 2:
+        raise SystemExit(
+            "at least two trainable leaf labels are required; "
+            f"available={[(all_categories[i]['id'], count) for i, count in sorted(all_class_counts.items())]}"
+        )
+
+    trainable_categories = [category for category in all_categories if category["id"] in set(selected_ids)]
+    index_remap = {all_label_to_index[category["id"]]: i for i, category in enumerate(trainable_categories)}
+    samples = remap_samples(all_samples, index_remap)
     train_samples, val_samples = stratified_split(samples, args.val_ratio, args.seed)
 
     train_tf, val_tf = make_transforms(args.image_size)
@@ -329,71 +430,148 @@ def main() -> None:
     )
 
     device = choose_device(args.device)
-    model = build_model(args.weights, len(trainable_categories)).to(device)
+    model = build_model(resolved_arch, args.weights, len(trainable_categories), args.pretrained).to(device)
     loss_weights = class_weights(train_samples, len(trainable_categories)).to(device)
     criterion = nn.CrossEntropyLoss(weight=loss_weights, label_smoothing=args.label_smoothing)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(args.epochs, 1))
+    start_epoch = 1
+    best_top1 = -1.0
+
+    if args.resume:
+        checkpoint = torch.load(args.resume, map_location=device, weights_only=False)
+        checkpoint_categories = checkpoint.get("categories", [])
+        checkpoint_ids = [category["id"] for category in checkpoint_categories]
+        trainable_ids = [category["id"] for category in trainable_categories]
+        if checkpoint_ids and checkpoint_ids != trainable_ids:
+            raise SystemExit(f"resume labels do not match current labels: {checkpoint_ids} != {trainable_ids}")
+        checkpoint_arch = checkpoint.get("arch") or checkpoint.get("model_arch") or "mobilenetv4_conv_small"
+        if resolve_arch(checkpoint_arch) != resolved_arch:
+            raise SystemExit(f"resume arch does not match current arch: {checkpoint_arch} != {resolved_arch}")
+        model.load_state_dict(checkpoint["model"], strict=True)
+        if "optimizer" in checkpoint:
+            optimizer.load_state_dict(checkpoint["optimizer"])
+        if "scheduler" in checkpoint:
+            scheduler.load_state_dict(checkpoint["scheduler"])
+        start_epoch = int(checkpoint.get("epoch", 0)) + 1
+        metrics = checkpoint.get("metrics", {})
+        best_top1 = float(metrics.get("best_top1", metrics.get("val_top1", -1.0)))
 
     (args.output_dir / "labels.json").write_text(json.dumps(trainable_categories, ensure_ascii=False, indent=2))
     config = vars(args).copy()
     for key in ["dataset_root", "weights", "categories", "overrides", "output_dir"]:
-        config[key] = str(config[key])
+        config[key] = str(config[key]) if config[key] is not None else None
+    config["resume"] = str(config["resume"]) if config["resume"] else None
+    config["resolved_arch"] = resolved_arch
+    config["trainable_leaf_ids"] = [category["id"] for category in trainable_categories]
     (args.output_dir / "config.json").write_text(json.dumps(config, ensure_ascii=False, indent=2))
 
     class_counts: dict[int, int] = {}
     for sample in samples:
         class_counts[sample.label] = class_counts.get(sample.label, 0) + 1
+    class_counts_by_id = {
+        trainable_categories[index]["id"]: count for index, count in sorted(class_counts.items())
+    }
     print(f"device={device}", flush=True)
+    weights_label = str(args.weights) if args.weights else ("timm-pretrained" if args.pretrained else "random-init")
+    print(f"arch={resolved_arch} weights={weights_label}", flush=True)
+    print(f"cashlog_leaf_ids={[c['id'] for c in trainable_categories]}", flush=True)
     print(f"cashlog_categories={[c['display_name'] for c in trainable_categories]}", flush=True)
-    print(f"train={len(train_samples)} val={len(val_samples)} counts={class_counts}", flush=True)
-    print("document_target=Top-1>=70 Top-3>=90 on Cashlog category level", flush=True)
+    print(f"train={len(train_samples)} val={len(val_samples)} counts={class_counts_by_id}", flush=True)
+    print("document_target=Top-1>=70 Top-3>=90 on Cashlog leaf category level", flush=True)
 
     metrics_path = args.output_dir / "metrics.csv"
-    best_top1 = -1.0
-    with metrics_path.open("w", newline="") as f:
+    mlflow_run = maybe_start_mlflow_run(args)
+    if mlflow_run is not None:
+        import mlflow
+
+        mlflow.log_params(
+            {
+                "model": resolved_arch,
+                "weights": str(args.weights) if args.weights else None,
+                "pretrained": args.pretrained,
+                "dataset_root": str(args.dataset_root),
+                "num_classes": len(trainable_categories),
+                "epochs": args.epochs,
+                "batch_size": args.batch_size,
+                "lr": args.lr,
+                "weight_decay": args.weight_decay,
+                "label_smoothing": args.label_smoothing,
+                "image_size": args.image_size,
+                "val_ratio": args.val_ratio,
+                "balanced_sampler": not args.no_balanced_sampler,
+                "trainable_leaf_ids": ",".join(category["id"] for category in trainable_categories),
+            }
+        )
+        mlflow.log_dict(class_counts_by_id, "class_counts.json")
+
+    append_metrics = args.resume is not None and metrics_path.exists()
+    with metrics_path.open("a" if append_metrics else "w", newline="") as f:
         writer = csv.DictWriter(
             f,
             fieldnames=["epoch", "train_loss", "train_top1", "train_top3", "val_loss", "val_top1", "val_top3", "best_top1", "seconds"],
         )
-        writer.writeheader()
-        for epoch in range(1, args.epochs + 1):
-            start = time.time()
-            print(f"\nepoch {epoch}/{args.epochs}", flush=True)
-            train_metrics = run_epoch(model, train_loader, criterion, optimizer, device, args.log_interval)
-            val_metrics = run_epoch(model, val_loader, criterion, None, device, 0)
-            scheduler.step()
-            elapsed = time.time() - start
-            best_top1 = max(best_top1, val_metrics["top1"])
-            row = {
-                "epoch": epoch,
-                "train_loss": f"{train_metrics['loss']:.6f}",
-                "train_top1": f"{train_metrics['top1']:.4f}",
-                "train_top3": f"{train_metrics['top3']:.4f}",
-                "val_loss": f"{val_metrics['loss']:.6f}",
-                "val_top1": f"{val_metrics['top1']:.4f}",
-                "val_top3": f"{val_metrics['top3']:.4f}",
-                "best_top1": f"{best_top1:.4f}",
-                "seconds": f"{elapsed:.2f}",
-            }
-            writer.writerow(row)
-            f.flush()
-            payload = {
-                "epoch": epoch,
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "categories": trainable_categories,
-                "metrics": row,
-            }
-            torch.save(payload, args.output_dir / "last.pt")
-            if val_metrics["top1"] >= best_top1:
-                torch.save(payload, args.output_dir / "best.pt")
-            print(
-                f"  train top1={train_metrics['top1']:.2f} top3={train_metrics['top3']:.2f} "
-                f"val top1={val_metrics['top1']:.2f} top3={val_metrics['top3']:.2f} "
-                f"best={best_top1:.2f} seconds={elapsed:.1f}",
-                flush=True,
-            )
+        if not append_metrics:
+            writer.writeheader()
+        try:
+            for epoch in range(start_epoch, args.epochs + 1):
+                start = time.time()
+                print(f"\nepoch {epoch}/{args.epochs}", flush=True)
+                train_metrics = run_epoch(model, train_loader, criterion, optimizer, device, args.log_interval)
+                val_metrics = run_epoch(model, val_loader, criterion, None, device, 0)
+                scheduler.step()
+                elapsed = time.time() - start
+                improved = val_metrics["top1"] >= best_top1
+                best_top1 = max(best_top1, val_metrics["top1"])
+                row = {
+                    "epoch": epoch,
+                    "train_loss": f"{train_metrics['loss']:.6f}",
+                    "train_top1": f"{train_metrics['top1']:.4f}",
+                    "train_top3": f"{train_metrics['top3']:.4f}",
+                    "val_loss": f"{val_metrics['loss']:.6f}",
+                    "val_top1": f"{val_metrics['top1']:.4f}",
+                    "val_top3": f"{val_metrics['top3']:.4f}",
+                    "best_top1": f"{best_top1:.4f}",
+                    "seconds": f"{elapsed:.2f}",
+                }
+                writer.writerow(row)
+                f.flush()
+                payload = {
+                    "epoch": epoch,
+                    "arch": resolved_arch,
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "categories": trainable_categories,
+                    "metrics": row,
+                }
+                torch.save(payload, args.output_dir / "last.pt")
+                if improved:
+                    torch.save(payload, args.output_dir / "best.pt")
+                if mlflow_run is not None:
+                    mlflow.log_metrics(
+                        {
+                            "train_loss": train_metrics["loss"],
+                            "train_top1": train_metrics["top1"],
+                            "train_top3": train_metrics["top3"],
+                            "val_loss": val_metrics["loss"],
+                            "val_top1": val_metrics["top1"],
+                            "val_top3": val_metrics["top3"],
+                            "best_top1": best_top1,
+                            "epoch_seconds": elapsed,
+                        },
+                        step=epoch,
+                    )
+                print(
+                    f"  train top1={train_metrics['top1']:.2f} top3={train_metrics['top3']:.2f} "
+                    f"val top1={val_metrics['top1']:.2f} top3={val_metrics['top3']:.2f} "
+                    f"best={best_top1:.2f} seconds={elapsed:.1f}",
+                    flush=True,
+                )
+        finally:
+            if mlflow_run is not None:
+                log_mlflow_artifacts(args.output_dir)
+                mlflow.end_run()
 
 
 if __name__ == "__main__":

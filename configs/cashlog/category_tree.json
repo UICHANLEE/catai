@@ -1,0 +1,139 @@
+[
+  {
+    "id": "meal",
+    "name": "식사",
+    "icon": "🍚",
+    "color": "#f97316",
+    "leaves": [
+      {"id": "meal_grocery", "name": "식재료"},
+      {"id": "meal_dining", "name": "외식·배달"},
+      {"id": "meal_cafe", "name": "카페·디저트"},
+      {"id": "meal_drink", "name": "술·음료"}
+    ]
+  },
+  {
+    "id": "life",
+    "name": "생활",
+    "icon": "🧴",
+    "color": "#059669",
+    "leaves": [
+      {"id": "life_goods", "name": "생활용품"},
+      {"id": "life_appliance", "name": "가전·가구"},
+      {"id": "life_clean", "name": "세탁·청소"}
+    ]
+  },
+  {
+    "id": "housing",
+    "name": "주거",
+    "icon": "🏠",
+    "color": "#0d9488",
+    "leaves": [
+      {"id": "housing_rent", "name": "월세·전세"},
+      {"id": "housing_fee", "name": "관리비"},
+      {"id": "housing_utility", "name": "공과금"}
+    ]
+  },
+  {
+    "id": "transit",
+    "name": "교통",
+    "icon": "🚌",
+    "color": "#2563eb",
+    "leaves": [
+      {"id": "transit_public", "name": "대중교통"},
+      {"id": "transit_car", "name": "택시·주차·유류"},
+      {"id": "transit_maintain", "name": "자동차유지"}
+    ]
+  },
+  {
+    "id": "comm",
+    "name": "통신",
+    "icon": "📶",
+    "color": "#6366f1",
+    "leaves": [
+      {"id": "comm_internet", "name": "인터넷·TV"},
+      {"id": "comm_mobile", "name": "휴대폰"}
+    ]
+  },
+  {
+    "id": "fashion",
+    "name": "의류/미용",
+    "icon": "👔",
+    "color": "#db2777",
+    "leaves": [
+      {"id": "fashion_clothes", "name": "의류"},
+      {"id": "fashion_beauty", "name": "미용·화장품"}
+    ]
+  },
+  {
+    "id": "health",
+    "name": "건강",
+    "icon": "💊",
+    "color": "#dc2626",
+    "leaves": [
+      {"id": "health_med", "name": "약·병원"},
+      {"id": "health_gym", "name": "운동·헬스"}
+    ]
+  },
+  {
+    "id": "edu",
+    "name": "교육",
+    "icon": "📚",
+    "color": "#4f46e5",
+    "leaves": [
+      {"id": "edu_class", "name": "학원·강의"},
+      {"id": "edu_book", "name": "도서·문구"}
+    ]
+  },
+  {
+    "id": "leisure",
+    "name": "문화/여가",
+    "icon": "🎬",
+    "color": "#7c3aed",
+    "leaves": [
+      {"id": "leisure_show", "name": "영화·공연·전시"},
+      {"id": "leisure_trip", "name": "여행"},
+      {"id": "leisure_hobby", "name": "취미"}
+    ]
+  },
+  {
+    "id": "gift",
+    "name": "경조사/선물",
+    "icon": "🎁",
+    "color": "#ea580c",
+    "leaves": [
+      {"id": "gift_event", "name": "경조사"},
+      {"id": "gift_present", "name": "선물"}
+    ]
+  },
+  {
+    "id": "finance",
+    "name": "금융/저축",
+    "icon": "💳",
+    "color": "#64748b",
+    "leaves": [
+      {"id": "finance_insure", "name": "보험"},
+      {"id": "finance_save", "name": "저축·투자"},
+      {"id": "finance_fee", "name": "이자·수수료"}
+    ]
+  },
+  {
+    "id": "family",
+    "name": "반려/육아",
+    "icon": "🍼",
+    "color": "#ec4899",
+    "leaves": [
+      {"id": "family_kids", "name": "육아"},
+      {"id": "family_pet", "name": "반려동물"}
+    ]
+  },
+  {
+    "id": "misc",
+    "name": "기타",
+    "icon": "📌",
+    "color": "#78716c",
+    "leaves": [
+      {"id": "misc_uncat", "name": "미분류"},
+      {"id": "misc_other", "name": "기타"}
+    ]
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-16T19:35:47.920761+00:00",
+  "samples": 99,
+  "leaf_count": 33,
+  "minimum_per_leaf": 3,
+  "top1_accuracy": 0.98989898989899,
+  "top3_accuracy": 0.98989898989899,
+  "macro_f1": 0.9896103896103896,
+  "minimum_leaf_recall": 0.6666666666666666,
+  "ece_10_bin": 0.27427963551429946,
+  "need_user_check_rate": 1.0,
+  "correct_auto_confirm_rate": 0.0,
+  "false_auto_confirm_rate": 0.0,
+  "latency_p50_seconds": 0.3489063340239227,
+  "latency_p95_seconds": 0.37764707116875773,
+  "dataset_scope": "synthetic_integration",
+  "safe_fallback_rate": 0.04040404040404041,
+  "scope_warning": "Synthetic rendered receipts validate I/O and 33-leaf routing only."
+}

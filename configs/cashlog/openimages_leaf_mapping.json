@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "dataset_version": "Open Images V7",
+  "mapping_purpose": "Human-verified visual proxy labels for CashLog training and proxy evaluation.",
+  "leaves": {
+    "meal_grocery": ["Apple", "Bell pepper", "Broccoli", "Carrot", "Fruit", "Vegetable"],
+    "meal_dining": ["Fast food", "Food", "Hamburger", "Pizza", "Salad", "Sushi"],
+    "meal_cafe": ["Baked goods", "Cake", "Coffee (drink)", "Dessert", "Doughnut", "Pastry"],
+    "meal_drink": ["Beer", "Cocktail", "Drink", "Juice", "Wine"],
+    "life_goods": ["Bathroom accessory", "Kitchenware", "Paper towel", "Toilet paper", "Towel"],
+    "life_appliance": ["Furniture", "Home appliance", "Refrigerator", "Television", "Washing machine"],
+    "life_clean": ["Dishwasher", "Soap dispenser", "Waste container"],
+    "transit_public": ["Bus", "Train"],
+    "transit_car": ["Parking meter", "Taxi"],
+    "transit_maintain": ["Auto part", "Tire", "Wrench"],
+    "comm_mobile": ["Mobile phone", "Telephone"],
+    "fashion_clothes": ["Clothing", "Dress", "Footwear", "Shirt", "Trousers"],
+    "fashion_beauty": ["Cosmetics", "Lipstick", "Perfume", "Personal care"],
+    "health_med": ["Band-aid", "Medical equipment", "Stethoscope", "Syringe"],
+    "health_gym": ["Dumbbell", "Stationary bicycle", "Training bench", "Treadmill"],
+    "edu_class": ["Whiteboard"],
+    "edu_book": ["Book", "Office supplies", "Pen", "Pencil case"],
+    "leisure_trip": ["Aircraft", "Backpack", "Suitcase"],
+    "leisure_hobby": ["Musical instrument", "Sewing machine", "Sports equipment"],
+    "gift_event": ["Envelope"],
+    "gift_present": ["Balloon", "Flower", "Teddy bear"],
+    "family_kids": ["Diaper", "Doll", "Infant bed", "Toy"],
+    "family_pet": ["Cat", "Cat furniture", "Dog", "Dog bed"]
+  },
+  "excluded_from_visual_proxy": [
+    "housing_rent",
+    "housing_fee",
+    "housing_utility",
+    "comm_internet",
+    "leisure_show",
+    "finance_insure",
+    "finance_save",
+    "finance_fee",
+    "misc_uncat",
+    "misc_other"
+  ]
+}

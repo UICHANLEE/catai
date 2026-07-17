@@ -1,0 +1,17 @@
+{
+  "type": "cashlog_weighted_logit_ensemble",
+  "image_size": 224,
+  "combine": "weighted_logit_average",
+  "members": [
+    {
+      "checkpoint": "../../checkpoints/cashlog_leaf_airflow/best.pt",
+      "arch": "mobilenetv4_conv_small",
+      "weight": 70.4183
+    },
+    {
+      "checkpoint": "../../checkpoints/cashlog_leaf_efficientnet_b0/best.pt",
+      "arch": "efficientnet_b0",
+      "weight": 87.7044
+    }
+  ]
+}

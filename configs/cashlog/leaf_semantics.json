@@ -1,0 +1,205 @@
+{
+  "taxonomy_version": "13.33.1",
+  "description": "CashLog 33-leaf data collection, OCR keyword, and model-prompt contract.",
+  "allowed_training_licenses": ["cc0", "pdm", "by"],
+  "leaves": {
+    "meal_grocery": {
+      "input_mode": "mixed",
+      "queries": ["grocery shopping ingredients", "fresh vegetables groceries", "supermarket groceries"],
+      "positive_terms": ["grocery", "groceries", "ingredient", "vegetable", "supermarket", "produce", "식재료", "장보기", "마트"],
+      "negative_terms": ["restaurant", "cafe", "dessert"]
+    },
+    "meal_dining": {
+      "input_mode": "mixed",
+      "queries": ["restaurant meal dining", "food delivery meal", "restaurant receipt dinner"],
+      "positive_terms": ["restaurant", "dining", "meal", "dinner", "lunch", "delivery", "외식", "배달", "식당"],
+      "negative_terms": ["grocery", "coffee shop", "dessert"]
+    },
+    "meal_cafe": {
+      "input_mode": "mixed",
+      "queries": ["coffee shop cafe", "cafe dessert pastry", "coffee and cake cafe"],
+      "positive_terms": ["coffee", "cafe", "dessert", "pastry", "cake", "bakery", "카페", "커피", "디저트"],
+      "negative_terms": ["restaurant dinner", "grocery"]
+    },
+    "meal_drink": {
+      "input_mode": "mixed",
+      "queries": ["bottled beverages drinks", "beer wine drinks", "soft drink bottles"],
+      "positive_terms": ["beverage", "drink", "beer", "wine", "bottle", "soda", "juice", "술", "음료"],
+      "negative_terms": ["coffee shop", "medicine"]
+    },
+    "life_goods": {
+      "input_mode": "visual",
+      "queries": ["household supplies shopping", "toilet paper household goods", "kitchen household supplies"],
+      "positive_terms": ["household", "toilet paper", "supplies", "kitchen", "tissue", "생활용품", "휴지", "주방용품"],
+      "negative_terms": ["furniture", "appliance", "detergent"]
+    },
+    "life_appliance": {
+      "input_mode": "visual",
+      "queries": ["home appliances furniture", "refrigerator washing machine appliance", "sofa furniture store"],
+      "positive_terms": ["appliance", "furniture", "refrigerator", "washing machine", "sofa", "television", "가전", "가구"],
+      "negative_terms": ["phone bill", "detergent"]
+    },
+    "life_clean": {
+      "input_mode": "mixed",
+      "queries": ["laundry detergent cleaning supplies", "house cleaning products", "vacuum cleaner cleaning"],
+      "positive_terms": ["laundry", "detergent", "cleaning", "cleaner", "vacuum", "세탁", "청소", "세제"],
+      "negative_terms": ["cosmetic", "furniture"]
+    },
+    "housing_rent": {
+      "input_mode": "document",
+      "queries": ["rent receipt apartment", "rental agreement document", "apartment lease contract"],
+      "positive_terms": ["rent", "rental", "lease", "tenant", "landlord", "월세", "전세", "임대차"],
+      "negative_terms": ["utility", "maintenance fee", "hotel"]
+    },
+    "housing_fee": {
+      "input_mode": "document",
+      "queries": ["apartment maintenance bill", "condominium fee invoice", "building maintenance charge statement"],
+      "positive_terms": ["maintenance", "condominium", "building fee", "service charge", "관리비", "공동주택"],
+      "negative_terms": ["car maintenance", "utility", "rent"]
+    },
+    "housing_utility": {
+      "input_mode": "document",
+      "queries": ["electricity utility bill", "gas water utility bill", "electric bill statement"],
+      "positive_terms": ["utility", "electricity", "electric", "water bill", "gas bill", "공과금", "전기", "수도", "가스"],
+      "negative_terms": ["internet bill", "phone bill", "rent"]
+    },
+    "transit_public": {
+      "input_mode": "mixed",
+      "queries": ["public transit ticket", "subway bus ticket", "metro transit card"],
+      "positive_terms": ["transit", "subway", "metro", "bus", "train ticket", "transport card", "대중교통", "버스", "지하철"],
+      "negative_terms": ["taxi", "parking", "airline"]
+    },
+    "transit_car": {
+      "input_mode": "mixed",
+      "queries": ["taxi receipt", "gas station fuel receipt", "parking ticket receipt"],
+      "positive_terms": ["taxi", "gas station", "fuel", "gasoline", "parking", "주유", "택시", "주차"],
+      "negative_terms": ["bus", "metro", "repair"]
+    },
+    "transit_maintain": {
+      "input_mode": "mixed",
+      "queries": ["auto repair receipt", "car maintenance service", "tire change auto shop"],
+      "positive_terms": ["auto repair", "car maintenance", "mechanic", "tire", "oil change", "자동차정비", "차량유지"],
+      "negative_terms": ["building maintenance", "parking", "taxi"]
+    },
+    "comm_internet": {
+      "input_mode": "document",
+      "queries": ["internet service bill", "broadband router invoice", "cable television bill"],
+      "positive_terms": ["internet", "broadband", "wifi", "router", "cable tv", "인터넷", "와이파이", "티비"],
+      "negative_terms": ["mobile phone bill", "electricity"]
+    },
+    "comm_mobile": {
+      "input_mode": "document",
+      "queries": ["mobile phone bill", "cellular plan invoice", "smartphone service receipt"],
+      "positive_terms": ["mobile phone", "cellular", "smartphone", "phone bill", "wireless plan", "휴대폰", "통신요금"],
+      "negative_terms": ["internet bill", "appliance"]
+    },
+    "fashion_clothes": {
+      "input_mode": "visual",
+      "queries": ["clothing shopping apparel", "clothes rack fashion store", "shoes and clothes shopping"],
+      "positive_terms": ["clothing", "clothes", "apparel", "shirt", "dress", "shoes", "fashion", "의류", "옷", "신발"],
+      "negative_terms": ["cosmetic", "laundry"]
+    },
+    "fashion_beauty": {
+      "input_mode": "mixed",
+      "queries": ["cosmetics makeup products", "skincare beauty products", "hair salon beauty"],
+      "positive_terms": ["cosmetic", "makeup", "skincare", "beauty", "salon", "perfume", "화장품", "미용", "헤어"],
+      "negative_terms": ["medicine", "clothing"]
+    },
+    "health_med": {
+      "input_mode": "mixed",
+      "queries": ["pharmacy medicine purchase", "hospital bill receipt", "doctor clinic visit"],
+      "positive_terms": ["pharmacy", "medicine", "hospital", "doctor", "clinic", "medical", "약국", "병원", "의료"],
+      "negative_terms": ["cosmetic", "gym"]
+    },
+    "health_gym": {
+      "input_mode": "mixed",
+      "queries": ["gym membership fitness", "fitness center workout", "exercise equipment gym"],
+      "positive_terms": ["gym", "fitness", "workout", "exercise", "membership", "헬스", "운동", "체육관"],
+      "negative_terms": ["hospital", "sports ticket"]
+    },
+    "edu_class": {
+      "input_mode": "document",
+      "queries": ["tuition receipt class", "education course classroom", "online course invoice"],
+      "positive_terms": ["tuition", "course", "classroom", "class", "academy", "lecture", "학원", "강의", "수강료"],
+      "negative_terms": ["bookstore", "concert"]
+    },
+    "edu_book": {
+      "input_mode": "mixed",
+      "queries": ["books stationery shopping", "bookstore purchase", "school supplies stationery"],
+      "positive_terms": ["book", "bookstore", "stationery", "notebook", "school supplies", "도서", "문구", "책"],
+      "negative_terms": ["course", "library building"]
+    },
+    "leisure_show": {
+      "input_mode": "mixed",
+      "queries": ["cinema movie ticket", "concert performance ticket", "museum exhibition ticket"],
+      "positive_terms": ["cinema", "movie ticket", "concert", "performance", "museum", "exhibition", "영화", "공연", "전시"],
+      "negative_terms": ["airline", "classroom"]
+    },
+    "leisure_trip": {
+      "input_mode": "mixed",
+      "queries": ["travel luggage vacation", "hotel booking travel", "airline boarding pass ticket"],
+      "positive_terms": ["travel", "vacation", "luggage", "hotel", "airline", "boarding pass", "여행", "호텔", "항공"],
+      "negative_terms": ["public transit", "gift"]
+    },
+    "leisure_hobby": {
+      "input_mode": "visual",
+      "queries": ["craft hobby supplies", "musical instrument hobby", "board game hobby"],
+      "positive_terms": ["hobby", "craft", "musical instrument", "board game", "art supplies", "취미", "공예", "악기"],
+      "negative_terms": ["concert ticket", "school supplies"]
+    },
+    "gift_event": {
+      "input_mode": "document",
+      "queries": ["wedding invitation gift envelope", "condolence envelope funeral", "ceremony cash gift envelope"],
+      "positive_terms": ["wedding", "invitation", "condolence", "funeral", "ceremony", "cash gift", "경조사", "축의금", "부의금"],
+      "negative_terms": ["wrapped present", "shopping bag"]
+    },
+    "gift_present": {
+      "input_mode": "visual",
+      "queries": ["wrapped gift present", "gift box ribbon", "birthday present package"],
+      "positive_terms": ["gift", "present", "wrapped", "ribbon", "gift box", "선물", "포장"],
+      "negative_terms": ["wedding envelope", "funeral"]
+    },
+    "finance_insure": {
+      "input_mode": "document",
+      "queries": ["insurance policy document", "insurance premium bill", "health insurance statement"],
+      "positive_terms": ["insurance", "policy", "premium", "coverage", "보험", "보험료"],
+      "negative_terms": ["bank fee", "hospital bill"]
+    },
+    "finance_save": {
+      "input_mode": "document",
+      "queries": ["investment account statement", "savings account document", "stock portfolio statement"],
+      "positive_terms": ["investment", "savings", "portfolio", "stock", "fund", "deposit", "저축", "투자", "예금"],
+      "negative_terms": ["insurance", "bank fee"]
+    },
+    "finance_fee": {
+      "input_mode": "document",
+      "queries": ["bank fee statement", "interest charge invoice", "ATM fee receipt"],
+      "positive_terms": ["bank fee", "service fee", "interest charge", "atm fee", "commission", "수수료", "이자"],
+      "negative_terms": ["savings", "insurance"]
+    },
+    "family_kids": {
+      "input_mode": "visual",
+      "queries": ["baby products shopping", "diapers childcare supplies", "children toys baby store"],
+      "positive_terms": ["baby", "diaper", "childcare", "children", "infant", "toy", "육아", "아기", "기저귀"],
+      "negative_terms": ["pet", "gift"]
+    },
+    "family_pet": {
+      "input_mode": "visual",
+      "queries": ["pet food supplies", "veterinary clinic pet", "dog cat pet store"],
+      "positive_terms": ["pet", "dog", "cat", "veterinary", "pet food", "animal supplies", "반려동물", "동물병원"],
+      "negative_terms": ["baby", "hospital human"]
+    },
+    "misc_uncat": {
+      "input_mode": "fallback",
+      "queries": ["blurry unreadable receipt", "illegible invoice photo", "unidentified blurred object"],
+      "positive_terms": ["blurry", "blurred", "unreadable", "illegible", "unidentified", "미분류", "판독불가"],
+      "negative_terms": []
+    },
+    "misc_other": {
+      "input_mode": "open_set",
+      "queries": ["miscellaneous household objects", "assorted everyday objects", "variety of random items"],
+      "positive_terms": ["miscellaneous", "assorted", "variety", "random items", "objects", "기타", "잡화"],
+      "negative_terms": []
+    }
+  }
+}

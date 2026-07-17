@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cashlog.local/schemas/real-holdout-v1.json",
+  "title": "CashLog real-photo holdout manifest row",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "sample_id",
+    "leaf_id",
+    "relative_path",
+    "sha256",
+    "group_id",
+    "review_status",
+    "consent_status"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "sample_id": {"type": "string", "minLength": 8, "maxLength": 128},
+    "leaf_id": {"type": "string", "pattern": "^[a-z]+_[a-z]+$"},
+    "relative_path": {"type": "string", "minLength": 1},
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "group_id": {
+      "type": "string",
+      "description": "De-identified user/session/merchant group used to prevent leakage."
+    },
+    "review_status": {"const": "approved"},
+    "consent_status": {"enum": ["owner_approved", "licensed"]},
+    "captured_at": {"type": ["string", "null"], "format": "date-time"},
+    "source": {"type": "string"},
+    "notes": {"type": "string", "maxLength": 500}
+  }
+}

@@ -1,13 +1,18 @@
 data/raw/
 data/processed/
 models/
+artifacts/
 logs/
 checkpoints/
 .venv/
+airflow_home/
+mlruns/
 
 __pycache__/
 *.pyc
 *.egg-info/
+.DS_Store
+.superpowers/
 reports/*_smoke/
 
 *.pt
