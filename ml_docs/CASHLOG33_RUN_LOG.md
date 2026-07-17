@@ -290,17 +290,18 @@ took 5.30 to 6.32 seconds, while the same image on the local MPS worker took abo
 0.35 seconds. A direct authenticated Quick Tunnel request took 0.74 to 1.12 seconds.
 
 CashLog now runs only the analyzer and analyzer-status functions in Vercel `icn1`,
-re-encodes large upstream images to a maximum 1280px JPEG, and performs the same
+re-encodes large upstream images to a maximum 960px JPEG, and performs the same
 best-effort reduction in the browser before upload. The server keeps the validated
 original when optimization is unavailable or does not reduce size. The 2.65 MiB
-canary was reduced to 226 KiB before the Galaxy hop without changing its
+canary was reduced to about 138 KiB before the Galaxy hop without changing its
 `meal_cafe` result.
 
 | Public measurement | Before | After |
 |---|---:|---:|
-| Original 2.65 MiB request | 5.30-6.32s | 2.98-3.69s |
+| Original 2.65 MiB request, browser optimization bypassed | 5.30-6.32s | 2.98-4.10s |
 | Pre-compressed 424 KiB request | 3.30-3.54s on `iad1` | 1.71-2.15s on `icn1` |
-| Model stage inside final request | not correlated | 0.34-0.39s |
+| Final 960px / 138 KiB client-sized request | not available | 0.94-1.12s |
+| Model stage inside measured requests | not correlated | 0.34-0.59s |
 
 The deployed client bundle contains the browser-side compressor. Vercel responses
 include `X-Cashlog-Read-Time-Ms`, `X-Cashlog-Optimize-Time-Ms`,
