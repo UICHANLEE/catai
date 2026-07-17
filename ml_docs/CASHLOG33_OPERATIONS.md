@@ -148,3 +148,9 @@ from model latency without logging image or OCR contents.
 Retraining is triggered by a reviewed data release, sustained per-leaf correction
 drift, or a planned model change. It is not triggered automatically from unreviewed
 user corrections.
+
+The daily `cashlog_feedback_curation` DAG exports a de-identified feedback snapshot,
+quarantines invalid rows, ranks approved image candidates, and logs curation metrics
+to MLflow. Its quantity gate never triggers training by itself. Review commands,
+release I/O, consent boundaries, and deletion duties are defined in
+`ml_docs/CASHLOG33_FEEDBACK_LOOP.md`.

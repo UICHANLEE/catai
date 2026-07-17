@@ -79,11 +79,12 @@ explicitly consents to image retention.
 
 ## Feedback Contract
 
-The app/backend records corrections according to
-`configs/cashlog/correction_event.schema.json`: model version, proposed Top 3, selected
-leaf, timestamp, source of correction, and separate image-retention consent. The
-React Native app sends this to NestJS; NestJS validates and stores it under RLS. The
-model worker is stateless and does not write directly to Supabase.
+The app records every explicit photo-category confirmation according to
+`configs/cashlog/correction_event.schema.json`: model and taxonomy versions, proposed
+Top 3, selected leaf, timestamp, confirmation source, review state, and separate
+image-retention consent. Supabase RLS forces client writes to `pending`; only the
+private review/export process can approve data. The model worker remains stateless
+and does not write directly to Supabase. See `ml_docs/CASHLOG33_FEEDBACK_LOOP.md`.
 
 ## Known Limitations
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cashlog.local/schemas/category-correction-v1.json",
-  "title": "CashLog category correction event",
+  "$id": "https://cashlog.local/schemas/category-feedback-v2.json",
+  "title": "CashLog category confirmation event",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -9,16 +9,23 @@
     "event_id",
     "sample_id",
     "model_version",
+    "taxonomy_version",
     "predicted_top3",
     "selected_leaf_id",
     "occurred_at",
-    "image_retention_consent"
+    "source",
+    "image_retention_consent",
+    "review_status"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "event_id": {"type": "string", "format": "uuid"},
     "sample_id": {"type": "string", "minLength": 8, "maxLength": 128},
     "model_version": {"type": "string"},
+    "taxonomy_version": {"type": "string"},
+    "request_id": {"type": ["string", "null"], "maxLength": 128},
+    "model_category": {"type": "string", "pattern": "^[a-z]+_[a-z]+$"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
     "predicted_top3": {
       "type": "array",
       "minItems": 1,
@@ -37,6 +44,8 @@
     "occurred_at": {"type": "string", "format": "date-time"},
     "image_retention_consent": {"type": "boolean"},
     "image_object_key": {"type": ["string", "null"]},
-    "source": {"enum": ["top3_selection", "manual_edit"]}
+    "source": {"enum": ["accepted_prediction", "top3_selection", "manual_edit"]},
+    "review_status": {"enum": ["pending", "approved", "rejected"]},
+    "reviewed_at": {"type": ["string", "null"], "format": "date-time"}
   }
 }

@@ -311,3 +311,10 @@ an `image_analysis_completed` JSON event without image, OCR, or secret contents.
 
 These results validate the current test route only. The ephemeral Quick Tunnel
 still must be replaced by a named, policy-controlled tunnel before production.
+## 2026-07-17 - Consent-based feedback collection
+
+- Added versioned confirmation events for accepted Top-1, alternate Top-3, and manual leaf edits.
+- Added separate opt-in image-retention consent in CashLog; ordinary photo storage is not treated as training consent.
+- Added Supabase pending-only client RLS, event idempotency, review state, model/taxonomy, Top-3, and private image reference fields.
+- Added HMAC de-identification, duplicate/path validation, quarantine, active-learning priority scoring, 33-leaf readiness gates, and restricted image indexes.
+- Added daily Airflow curation and MLflow metrics/artifacts. Automatic training from user feedback remains disabled until a reviewed release is explicitly approved.

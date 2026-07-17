@@ -72,6 +72,9 @@ services:
       CATAI_TRAIN_EPOCHS: "30"
       CATAI_TRAIN_BATCH_SIZE: "32"
       CATAI_OUTPUT_DIR: checkpoints/cashlog_leaf_airflow
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      CASHLOG_FEEDBACK_HMAC_KEY: ${CASHLOG_FEEDBACK_HMAC_KEY:-}
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
