@@ -189,12 +189,48 @@ Deployment-specific operator actions still required:
    `PRODUCT_ANALYZER_API_KEY`; never place it in React Native or a `VITE_` variable.
 2. Create Jenkins credential `airflow-local-basic` and a Pipeline job using
    `Jenkinsfile`.
-3. Supply/operate the actual Tailscale ACL and Galaxy/home-server credentials. This
-   repository provides the private relay and reverse-tunnel implementation but cannot
-   deploy to an external phone without access.
+3. Install and enable the official Android Tailscale app, then apply the documented
+   ACL after the Galaxy and backend node identities are available.
 4. Replace the local Airflow bootstrap `admin/admin` before any non-loopback use.
 
-## 10. Monitoring Locations
+## 10. Galaxy Deployment Verification
+
+The private relay was deployed to the Galaxy under
+`~/services/cashlog-gateway` on 2026-07-17. The device is Android/aarch64 with
+Termux Python 3.13.13. The CashLog application repository on the phone was not
+modified; the relay has an isolated service directory and Python environment.
+
+The existing relay exposed a concrete authentication defect: it forwarded the
+incoming gateway key but did not add `X-Internal-API-Key`, while the Mac model
+worker required that header. `/health` therefore returned 200 even though actual
+inference could fail upstream authentication. The deployed relay now forwards two
+independent credentials, streams request bodies with a 14 MiB limit, caps JSON
+responses at 2 MiB, disables redirects and access logs, and requires the gateway
+key for health checks.
+
+Deployment checks:
+
+| Check | Result |
+|---|---|
+| Dedicated SSH identity | key login succeeded |
+| SSH password / keyboard login | disabled and actively rejected |
+| SSH forwarding policy | reverse only; `GatewayPorts no` |
+| Secret files | mode `600`; values never printed or committed |
+| Relay without or with wrong key | HTTP 401 |
+| Authenticated relay health | HTTP 200 |
+| Galaxy-to-Mac tunnel health | HTTP 200 |
+| Existing cafe receipt through Galaxy | `meal_cafe`, confidence 0.8143 |
+| Warm end-to-end relay latency | 2.01 seconds |
+| Galaxy LAN ports 8000 and 18010 | connection refused |
+| Direct Cloudflare Quick Tunnel | stopped |
+
+The Galaxy relay is currently bound to `127.0.0.1:8000`. This is intentionally
+private and working locally, but external Backend-to-Galaxy traffic remains blocked
+until the official Android Tailscale app is installed, a `100.x` node address is
+assigned, and an ACL allows only the Backend identity to the relay. The removed
+Quick Tunnel must not be restarted as a production substitute.
+
+## 11. Monitoring Locations
 
 - Airflow: `http://127.0.0.1:8080`, DAG run `codex-20260717T0411KST`.
 - MLflow: `http://127.0.0.1:5500`, experiment `cashlog33-hybrid-v2`.

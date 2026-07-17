@@ -35,6 +35,11 @@ AllowTcpForwarding yes
 GatewayPorts no
 ```
 
+The repository includes the stricter drop-in
+`deploy/phone_gateway/sshd_config.d/90-cashlog-security.conf`. It also disables
+agent, X11, and TUN forwarding and limits TCP forwarding to the reverse
+direction required by the model tunnel. Run `sshd -t` before reloading it.
+
 Restart `sshd` and verify a new key-authenticated session before closing the old
 one. Restrict SSH to the MacBook identity in the Tailscale ACL.
 
@@ -71,6 +76,7 @@ export GATEWAY_API_KEY='<nest-backend-to-galaxy-secret>'
 export MODEL_API_KEY='<same-value-as-CATAI_INTERNAL_API_KEY>'
 export MODEL_BASE_URL=http://127.0.0.1:18010
 export MAX_REQUEST_BYTES=14680064
+export MAX_RESPONSE_BYTES=2097152
 export EXPOSE_HEALTH=false
 
 python -m uvicorn proxy_server:app \
@@ -80,10 +86,31 @@ python -m uvicorn proxy_server:app \
   --no-access-log
 ```
 
+The included `run_gateway.sh`, `start_gateway.sh`, and `stop_gateway.sh` read
+the two secrets from mode-`600` files instead of command-line arguments. They
+also acquire a Termux wake lock and keep the process ID and logs under private
+runtime/state directories. `GATEWAY_BIND_HOST` remains `127.0.0.1` until the
+Tailscale address and ACL are ready.
+
+Termux Python 3.13 currently supplies its Android-compatible Pydantic build as
+a platform package. Create the gateway environment with
+`python -m venv --system-site-packages .venv`; the requirements deliberately
+keep Pydantic on that compatible major version while updating the pure-Python
+FastAPI and Starlette layers.
+
+For reboot recovery, install the official Termux:Boot Android app and copy
+`termux_boot_start.sh` to `~/.termux/boot/20-cashlog-gateway`. The script starts
+key-only SSH if needed, acquires a wake lock, and starts the loopback gateway.
+Android battery optimization must be disabled for Termux and Termux:Boot.
+
 NestJS sends `X-API-Key: <GATEWAY_API_KEY>` over Tailscale. The relay verifies
 that key, forwards the request to loopback, and adds
 `X-Internal-API-Key: <MODEL_API_KEY>` for the model worker. Neither secret is
 stored in React Native.
+
+With `EXPOSE_HEALTH=false`, `/health` is available only when the same
+`X-API-Key` header is present. Request bodies are streamed with a 14 MiB cap,
+and model responses are rejected above 2 MiB.
 
 ## 4. Tailscale Policy
 
