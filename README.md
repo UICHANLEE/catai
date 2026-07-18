@@ -211,3 +211,14 @@ FastAPI 앱에서 제공합니다.
 
 현재 `guarded_integration_candidate` 상태이며 실사진 33-leaf 고정 holdout이
 production gate를 통과하기 전에는 자동 확정을 활성화하지 않습니다.
+
+최초 배포 전 데이터셋 오답·저신뢰 샘플을 사람이 직접 교정하려면 로컬 전용
+검수 도구를 실행합니다.
+
+```bash
+.venv/bin/python -m catai.predeploy_queue
+.venv/bin/python -m catai.predeploy_labeler
+```
+
+검수 화면은 `http://127.0.0.1:8011`에서만 열리며, 결정 결과와 재학습
+manifest 계약은 `ml_docs/CASHLOG33_PREDEPLOY_LABELING.md`에 정리되어 있습니다.

@@ -33,8 +33,26 @@ Primary records:
 - `ml_docs/CASHLOG33_MODEL_DESIGN.md`
 - `ml_docs/CASHLOG33_DATA_CARD.md`
 - `ml_docs/CASHLOG33_OPERATIONS.md`
+- `ml_docs/CASHLOG33_PREDEPLOY_LABELING.md`
 - `ml_docs/CASHLOG33_RUN_LOG.md`
 - `reports/cashlog33/model_report/index.html`
+
+## Pre-deployment error review
+
+Before the first deployment, inspect current-model mismatches against the scored
+training candidate manifest with the loopback-only labeling tool:
+
+```bash
+.venv/bin/python -m catai.predeploy_queue
+.venv/bin/python -m catai.predeploy_labeler
+```
+
+Open `http://127.0.0.1:8011`. Confirm a valid source label, correct it to any of
+the 33 leaves, or reject the sample. Decisions are stored server-side and the
+generated `training_manifest.jsonl` feeds `scripts/build_cashlog33_dataset.py`.
+All reviewed error-mining samples are locked to `train`; production metrics still
+require a separate untouched holdout. See
+`ml_docs/CASHLOG33_PREDEPLOY_LABELING.md` for the complete I/O contract.
 
 ## MPS target-95 run (2026-07-17)
 

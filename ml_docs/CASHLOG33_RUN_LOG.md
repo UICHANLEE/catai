@@ -318,3 +318,13 @@ still must be replaced by a named, policy-controlled tunnel before production.
 - Added Supabase pending-only client RLS, event idempotency, review state, model/taxonomy, Top-3, and private image reference fields.
 - Added HMAC de-identification, duplicate/path validation, quarantine, active-learning priority scoring, 33-leaf readiness gates, and restricted image indexes.
 - Added daily Airflow curation and MLflow metrics/artifacts. Automatic training from user feedback remains disabled until a reviewed release is explicitly approved.
+
+## 2026-07-18 - Pre-deployment hard-example labeling
+
+- Added a loopback-only 33-leaf labeling server at `http://127.0.0.1:8011`.
+- Added server-side, atomic label decisions with revision checks and an append-only audit log.
+- Added confirm, correct, reject, filter, search, and current-model Top-3 inspection flows.
+- Added a queue builder that reuses the trained vision head and embedding cache instead of rerunning image inference.
+- Current trained-head queue: 411 samples, 36 Top-1 mismatches, 330 uncertain samples, and 45 confident matches.
+- Human-reviewed error-mining rows are locked to `train`; they cannot establish deployment accuracy.
+- Verified 26 Python tests, Python bytecode compilation, JavaScript syntax, loopback/API security, and desktop/mobile layouts.

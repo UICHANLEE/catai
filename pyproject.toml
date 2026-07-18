@@ -46,6 +46,8 @@ model = [
 catai-predict-cashlog = "catai.cli:predict_cashlog_main"
 catai-report-cashlog = "catai.report:main"
 catai-serve-cashlog = "catai.cashlog_api:main"
+catai-label-cashlog = "catai.predeploy_labeler:main"
+catai-build-label-queue = "catai.predeploy_queue:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -55,7 +57,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-catai = ["assets/cashlog_category_uecfood_mps/*"]
+catai = ["assets/cashlog_category_uecfood_mps/*", "labeler/*"]
 
 [tool.vercel]
 entrypoint = "main:app"

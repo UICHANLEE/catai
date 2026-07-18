@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CashLog 배포 전 데이터 검수</title>
+  <link rel="stylesheet" href="/assets/labeler.css">
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <p class="eyebrow">CASHLOG 33-LEAF</p>
+      <h1>배포 전 데이터 검수</h1>
+    </div>
+    <div class="header-actions">
+      <span id="save-status" class="save-status" role="status">불러오는 중</span>
+      <button id="export-button" class="primary-command" type="button">재학습 데이터 생성</button>
+    </div>
+  </header>
+
+  <section class="metrics" aria-label="검수 현황">
+    <div><span>전체</span><strong id="metric-total">0</strong></div>
+    <div><span>모델 불일치</span><strong id="metric-mismatches">0</strong></div>
+    <div><span>남은 오답 후보</span><strong id="metric-error-remaining">0</strong></div>
+    <div><span>확정</span><strong id="metric-approved">0</strong></div>
+    <div><span>라벨 교정</span><strong id="metric-corrected">0</strong></div>
+    <div><span>제외</span><strong id="metric-rejected">0</strong></div>
+  </section>
+
+  <section class="toolbar" aria-label="검수 필터">
+    <div class="view-tabs" role="tablist" aria-label="검수 큐">
+      <button type="button" role="tab" data-mode="errors" aria-selected="true">오답 후보</button>
+      <button type="button" role="tab" data-mode="needs_review">검수 필요</button>
+      <button type="button" role="tab" data-mode="unreviewed">미검수</button>
+      <button type="button" role="tab" data-mode="reviewed">완료</button>
+      <button type="button" role="tab" data-mode="all">전체</button>
+    </div>
+    <label class="field compact-field">
+      <span>기존 라벨</span>
+      <select id="leaf-filter">
+        <option value="">전체 카테고리</option>
+      </select>
+    </label>
+    <label class="field search-field">
+      <span>검색</span>
+      <input id="search-input" type="search" placeholder="샘플, 제목, 카테고리">
+    </label>
+    <div class="pager">
+      <button id="previous-button" class="icon-command" type="button" title="이전 샘플" aria-label="이전 샘플">&#8249;</button>
+      <span id="queue-position">0 / 0</span>
+      <button id="next-button" class="icon-command" type="button" title="다음 샘플" aria-label="다음 샘플">&#8250;</button>
+    </div>
+  </section>
+
+  <main class="workspace">
+    <aside class="queue-panel" aria-label="검수 샘플 목록">
+      <div id="queue-list" class="queue-list"></div>
+    </aside>
+
+    <section class="image-panel" aria-label="원본 이미지">
+      <div id="image-stage" class="image-stage">
+        <img id="sample-image" alt="검수 대상 이미지">
+        <div id="image-empty" class="empty-state" hidden>표시할 이미지가 없습니다.</div>
+      </div>
+      <dl class="source-metadata">
+        <div><dt>샘플</dt><dd id="sample-id">-</dd></div>
+        <div><dt>제목</dt><dd id="sample-title">-</dd></div>
+        <div><dt>수집원</dt><dd id="sample-source">-</dd></div>
+        <div><dt>검색어</dt><dd id="sample-query">-</dd></div>
+        <div><dt>라이선스</dt><dd id="sample-license">-</dd></div>
+        <div><dt>데이터 분할</dt><dd id="sample-split">-</dd></div>
+        <div><dt>예측 모델</dt><dd id="sample-model">-</dd></div>
+      </dl>
+    </section>
+
+    <aside class="review-panel" aria-label="라벨 검수">
+      <section class="comparison">
+        <div>
+          <span class="section-label">데이터셋 라벨</span>
+          <strong id="original-label">-</strong>
+          <code id="original-leaf">-</code>
+        </div>
+        <div class="comparison-arrow" aria-hidden="true">&#8594;</div>
+        <div>
+          <span class="section-label">모델 Top-1</span>
+          <strong id="predicted-label">-</strong>
+          <code id="predicted-leaf">-</code>
+        </div>
+      </section>
+
+      <section class="prediction-section">
+        <div class="section-heading">
+          <h2>모델 Top-3</h2>
+          <span id="sample-status" class="status-badge">-</span>
+        </div>
+        <div id="top3-list" class="top3-list"></div>
+      </section>
+
+      <section class="decision-section">
+        <h2>정답 라벨</h2>
+        <label class="field">
+          <span>33개 leaf</span>
+          <select id="label-select"></select>
+        </label>
+        <label class="field">
+          <span>검수 메모</span>
+          <textarea id="decision-note" rows="3" maxlength="1000" placeholder="라벨 근거 또는 제외 사유"></textarea>
+        </label>
+        <div class="decision-actions">
+          <button id="confirm-original" class="confirm-command" type="button">원본 라벨 확정</button>
+          <button id="save-correction" class="primary-command" type="button">선택 라벨 저장</button>
+          <button id="reject-sample" class="reject-command" type="button">학습 제외</button>
+          <button id="clear-decision" class="quiet-command" type="button">결정 취소</button>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="/assets/labeler.js" defer></script>
+</body>
+</html>
