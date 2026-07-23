@@ -27,6 +27,8 @@ CURRENT_MODEL_INPUT = (
     ROOT / "data/processed/cashlog33/predeploy_review/current_model_scored_manifest.jsonl"
 )
 DEFAULT_OUTPUT_DIR = ROOT / "data/processed/cashlog33/predeploy_review/v1"
+ACTUAL_INPUT = ROOT / "data/raw/cashlog33/actual/manifest.jsonl"
+ACTUAL_OUTPUT_DIR = ROOT / "data/processed/cashlog33/actual_review/v1"
 ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 TRAINING_REVIEW_STATUSES = {"approved", "auto_approved", "source_mapped", "trusted"}
 LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -205,10 +207,14 @@ class ReviewRepository:
         categories_path: Path = DEFAULT_CATEGORIES,
         output_dir: Path = DEFAULT_OUTPUT_DIR,
         image_roots: list[Path] | None = None,
+        dataset_kind: Literal["proxy", "actual"] = "proxy",
     ) -> None:
         self.input_manifest = input_manifest.resolve()
         self.categories_path = categories_path.resolve()
         self.output_dir = output_dir.resolve()
+        if dataset_kind not in {"proxy", "actual"}:
+            raise ValueError("dataset_kind must be proxy or actual")
+        self.dataset_kind = dataset_kind
         if self.output_dir == self.input_manifest.parent:
             raise ValueError("output directory must not overwrite the source manifest directory")
         self.decisions_path = self.output_dir / "decisions.jsonl"
@@ -404,6 +410,13 @@ class ReviewRepository:
         )
         return {
             "schema_version": 1,
+            "dataset_kind": self.dataset_kind,
+            "default_mode": "unreviewed" if self.dataset_kind == "actual" else "errors",
+            "ui_title": (
+                "실데이터 라벨 검수"
+                if self.dataset_kind == "actual"
+                else "배포 전 데이터 검수"
+            ),
             "input_manifest": str(self.input_manifest),
             "manifest_sha256": self.manifest_sha256,
             "output_dir": str(self.output_dir),
@@ -474,7 +487,11 @@ class ReviewRepository:
                 output = dict(row)
                 if decision:
                     output["predeploy_original_leaf_id"] = str(row["leaf_id"])
-                    output["review_method"] = "human_predeploy_labeler_v1"
+                    output["review_method"] = (
+                        "human_actual_labeler_v1"
+                        if self.dataset_kind == "actual"
+                        else "human_predeploy_labeler_v1"
+                    )
                     output["reviewed_at"] = decision["reviewed_at"]
                     output["human_review"] = {
                         "event_id": decision["event_id"],
@@ -504,6 +521,7 @@ class ReviewRepository:
             summary = {
                 "schema_version": 1,
                 "generated_at": utc_now(),
+                "dataset_kind": self.dataset_kind,
                 "input_manifest": str(self.input_manifest),
                 "input_manifest_sha256": self.manifest_sha256,
                 "decisions": self.summary(),
@@ -536,7 +554,11 @@ def _origin_is_loopback(request: Request) -> bool:
 def create_app(repository: ReviewRepository) -> FastAPI:
     token = secrets.token_urlsafe(32)
     app = FastAPI(
-        title="CashLog pre-deployment label review",
+        title=(
+            "CashLog actual-data label review"
+            if repository.dataset_kind == "actual"
+            else "CashLog pre-deployment label review"
+        ),
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
@@ -615,7 +637,7 @@ def create_app(repository: ReviewRepository) -> FastAPI:
     def health() -> dict[str, Any]:
         return {
             "status": "ok",
-            "scope": "loopback-only-predeploy-labeling",
+            "scope": f"loopback-only-{repository.dataset_kind}-labeling",
             "samples": repository.summary()["total"],
         }
 
@@ -628,24 +650,46 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--input-manifest", type=Path)
     parser.add_argument("--categories", type=Path, default=DEFAULT_CATEGORIES)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--image-root", type=Path, action="append", dest="image_roots")
     parser.add_argument("--host", default="127.0.0.1", choices=sorted(LOOPBACK_HOSTS))
-    parser.add_argument("--port", type=int, default=8011)
+    parser.add_argument("--port", type=int)
+    parser.add_argument(
+        "--actual",
+        action="store_true",
+        help="Review only consented CashLog actual images on the isolated queue.",
+    )
     parser.add_argument("--export-only", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    input_manifest = args.input_manifest or (
-        CURRENT_MODEL_INPUT if CURRENT_MODEL_INPUT.exists() else DEFAULT_INPUT
-    )
+    if args.actual:
+        input_manifest = args.input_manifest or ACTUAL_INPUT
+        output_dir = args.output_dir or ACTUAL_OUTPUT_DIR
+        port = args.port if args.port is not None else 8012
+        dataset_kind: Literal["proxy", "actual"] = "actual"
+        image_roots = args.image_roots or [input_manifest.parent]
+        if not input_manifest.is_file():
+            raise SystemExit(
+                "actual manifest not found; run scripts/sync_cashlog_actual.py first: "
+                f"{input_manifest}"
+            )
+    else:
+        input_manifest = args.input_manifest or (
+            CURRENT_MODEL_INPUT if CURRENT_MODEL_INPUT.exists() else DEFAULT_INPUT
+        )
+        output_dir = args.output_dir or DEFAULT_OUTPUT_DIR
+        port = args.port if args.port is not None else 8011
+        dataset_kind = "proxy"
+        image_roots = args.image_roots
     repository = ReviewRepository(
         input_manifest=input_manifest,
         categories_path=args.categories,
-        output_dir=args.output_dir,
-        image_roots=args.image_roots,
+        output_dir=output_dir,
+        image_roots=image_roots,
+        dataset_kind=dataset_kind,
     )
     if args.export_only:
         print(json.dumps(repository.export(), ensure_ascii=False, indent=2), flush=True)
@@ -656,7 +700,8 @@ def main() -> None:
     print(
         json.dumps(
             {
-                "url": f"http://{args.host}:{args.port}",
+                "url": f"http://{args.host}:{port}",
+                "dataset_kind": dataset_kind,
                 "samples": summary["total"],
                 "mismatches": summary["mismatches"],
                 "output_dir": str(repository.output_dir),
@@ -666,7 +711,7 @@ def main() -> None:
         ),
         flush=True,
     )
-    uvicorn.run(create_app(repository), host=args.host, port=args.port, access_log=False)
+    uvicorn.run(create_app(repository), host=args.host, port=port, access_log=False)
 
 
 if __name__ == "__main__":

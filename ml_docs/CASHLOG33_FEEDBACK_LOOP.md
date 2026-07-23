@@ -13,7 +13,8 @@ CashLog 사진 저장
   -> Supabase cashlog_category_feedback (pending, RLS)
   -> Airflow cashlog_feedback_curation (매일)
   -> HMAC 비식별 export + 잘못된 행 quarantine
-  -> 운영자 이미지/라벨 검수
+  -> 동의된 실이미지 actual/ 격리 반입 + 메타데이터 제거
+  -> actual 전용 로컬 도구에서 운영자 이미지/라벨 검수
   -> approved 행만 능동학습 후보 선별
   -> MLflow 지표/산출물 기록
   -> 33 leaf 데이터 게이트
@@ -54,10 +55,13 @@ CashLog 사진 저장
 1. Supabase와 HMAC 비밀값 존재 여부를 fail-closed로 확인한다.
 2. 필요한 열만 읽고 사용자 ID를 HMAC-SHA256 그룹 ID로 치환한다.
 3. 일반 이벤트 파일에서 사용자 ID, expense ID, request ID, 이미지 경로를 제거한다.
-4. 승인된 이미지 경로만 권한 `0600`의 `secure_image_index.jsonl`에 분리한다.
+4. 명시적으로 보관 동의한 pending/approved 이미지 경로만 권한 `0600`의
+   `secure_image_index.jsonl`에 분리한다. rejected 또는 미동의 이미지는 포함하지 않는다.
 5. 스키마 위반, 경로 소유권 위반, UUID 중복을 `quarantine.jsonl`로 격리한다.
-6. 승인 데이터의 오분류, 낮은 margin, 낮은 confidence, leaf 부족도를 조합해 우선순위를 계산한다.
-7. 요약 지표와 후보 파일을 MLflow `cashlog33-feedback-curation` 실험에 기록한다.
+6. restricted index의 이미지를 `data/raw/cashlog33/actual`로 반입하면서 EXIF/GPS를
+   제거하고 SHA-256 파일명으로 바꾼다.
+7. 승인 데이터의 오분류, 낮은 margin, 낮은 confidence, leaf 부족도를 조합해 우선순위를 계산한다.
+8. 요약 지표와 후보 파일을 MLflow `cashlog33-feedback-curation` 실험에 기록한다.
 
 각 Airflow run은 고유 릴리스 경로를 사용하며, 완성된 파일 세트가 있는 재시도는 같은
 스냅샷을 재사용한다. 일부 파일만 남은 불완전 릴리스는 자동 덮어쓰지 않고 실패시켜
@@ -79,7 +83,9 @@ HMAC 키는 API 키와 별도로 생성하고 32바이트 이상이어야 한다
 | 파일 | 포함 정보 | 접근 |
 |---|---|---|
 | `events.jsonl` | 비식별 피드백, Top-3, 확정 leaf, 모델/taxonomy, 검수 상태 | ML 운영자 |
-| `secure_image_index.jsonl` | 승인된 event/sample과 비공개 object key 매핑 | 최소 권한 운영자, `0600` |
+| `secure_image_index.jsonl` | 동의된 pending/approved event/sample과 비공개 object key 매핑 | 최소 권한 운영자, `0600` |
+| `actual/manifest.jsonl` | 비식별 sample, 사용자 확정 leaf, 모델 Top-3, 정규화 이미지 경로 | 로컬 라벨러 |
+| `actual/images/` | EXIF 제거 및 SHA-256 파일명으로 정규화한 실이미지 | 로컬 라벨러, `0600` |
 | `quarantine.jsonl` | 행 번호, event ID, 오류 사유만 포함 | ML 운영자 |
 | `training_candidates.jsonl` | 승인·동의된 표본과 능동학습 우선순위 | 학습 파이프라인 |
 | `approved_metadata_feedback.jsonl` | 승인된 이미지/비이미지 피드백 | 품질·보정 분석 |
@@ -88,6 +94,8 @@ HMAC 키는 API 키와 별도로 생성하고 32바이트 이상이어야 한다
 
 일반 파일에는 원본 사용자 ID나 object key가 없어야 한다. `group_id`는 데이터 분할
 누출 방지를 위한 HMAC 값이며 사용자를 복원하는 식별자로 사용하지 않는다.
+`actual/manifest.jsonl`에는 `group_id`도 넣지 않으며, 실제 이미지 검수 결과는
+`data/processed/cashlog33/actual_review/v1`에 별도로 저장한다.
 
 ## 검수와 승인
 
@@ -107,6 +115,17 @@ python scripts/review_cashlog_feedback.py --decisions review-decisions.jsonl
 
 검수되지 않은 `pending` 행은 학습 후보가 되지 않는다. 승인 후 다음 Airflow 실행에서
 새 릴리스에 포함된다.
+
+실이미지 라벨 검수는 다음 별도 큐에서 수행한다.
+
+```bash
+.venv/bin/python -m catai.predeploy_labeler --actual
+# http://127.0.0.1:8012
+```
+
+사용자 확정 leaf를 그대로 확인하거나 33개 leaf 중 하나로 교정하고, 부적합 이미지는
+학습 제외한다. actual 큐의 `training_manifest.jsonl`에는 이 사람 검수를 통과한 행만
+포함된다.
 
 ## 학습 게이트
 

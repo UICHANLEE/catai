@@ -6,6 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PIL import Image
+
+from catai.actual_dataset import materialize_actual_release
 from catai.feedback import (
     curate_feedback_release,
     export_feedback_release,
@@ -154,8 +157,108 @@ class FeedbackPipelineTests(unittest.TestCase):
         self.assertIn('dag_id="cashlog_feedback_curation"', dag_source)
         self.assertIn('schedule="@daily"', dag_source)
         self.assertIn("SUPABASE_SERVICE_ROLE_KEY", dag_source)
+        self.assertIn('task_id="materialize_actual_dataset"', dag_source)
+        self.assertIn("scripts/sync_cashlog_actual.py", dag_source)
+        self.assertIn("--fail-on-quarantine", dag_source)
         self.assertIn("auto_training_allowed", dag_source)
         self.assertNotIn("TriggerDagRunOperator", dag_source)
+
+    def test_actual_dataset_moves_only_consented_images_and_strips_identifiers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "release"
+            source_root = root / "private-storage"
+            source_path = source_root / USER_ID / "expense-1.jpg"
+            source_path.parent.mkdir(parents=True)
+            image = Image.new("RGB", (12, 8), color=(240, 120, 30))
+            exif = Image.Exif()
+            exif[315] = "private-camera-owner"
+            image.save(source_path, format="JPEG", exif=exif)
+
+            export_feedback_release(
+                [feedback_row(1, "meal_cafe", status="pending")],
+                output_dir=release,
+                leaf_ids=self.leaf_ids,
+                hmac_key=HMAC_KEY,
+            )
+            actual_dir = root / "actual"
+            summary = materialize_actual_release(
+                release_dir=release,
+                actual_dir=actual_dir,
+                categories_path=CATEGORIES,
+                source_root=source_root,
+            )
+
+            self.assertEqual(1, summary["imported"])
+            self.assertFalse(source_path.exists())
+            self.assertEqual("local_move", summary["source_mode"])
+            self.assertFalse(summary["contains_user_ids"])
+            manifest_text = (actual_dir / "manifest.jsonl").read_text(encoding="utf-8")
+            self.assertNotIn(USER_ID, manifest_text)
+            self.assertNotIn("image_object_key", manifest_text)
+            self.assertNotIn("group_id", manifest_text)
+            self.assertNotIn("private-camera-owner", manifest_text)
+            row = json.loads(manifest_text)
+            self.assertTrue(row["sample_id"].startswith("cashlog_actual:"))
+            self.assertEqual("actual", row["dataset_origin"])
+            self.assertEqual("pending", row["review_status"])
+            self.assertTrue(row["metadata_stripped"])
+            actual_image = Path(row["relative_path"])
+            self.assertTrue(actual_image.is_file())
+            with Image.open(actual_image) as sanitized:
+                self.assertEqual("JPEG", sanitized.format)
+                self.assertEqual(0, len(sanitized.getexif()))
+            self.assertEqual(0o600, stat.S_IMODE(actual_image.stat().st_mode))
+            self.assertEqual(0o700, stat.S_IMODE(actual_dir.stat().st_mode))
+
+            repeated = materialize_actual_release(
+                release_dir=release,
+                actual_dir=actual_dir,
+                categories_path=CATEGORIES,
+                source_root=source_root,
+            )
+            self.assertEqual(0, repeated["imported"])
+            self.assertEqual(1, repeated["already_present"])
+            self.assertEqual(1, repeated["actual_dataset_rows"])
+
+    def test_rejected_or_nonconsented_images_never_enter_the_secure_index(self) -> None:
+        rows = [
+            feedback_row(1, "meal_cafe", status="rejected"),
+            feedback_row(2, "meal_dining", status="pending", consent=False),
+            feedback_row(3, "meal_grocery", status="pending", consent=True),
+        ]
+        events, secure, quarantine = normalize_feedback_rows(
+            rows,
+            leaf_ids=set(self.leaf_ids),
+            hmac_key=HMAC_KEY,
+        )
+        self.assertEqual([], quarantine)
+        self.assertEqual(3, len(events))
+        self.assertEqual(1, len(secure))
+        self.assertEqual("pending", secure[0]["review_status"])
+
+    def test_actual_dataset_rejects_unsafe_secure_object_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "release"
+            export_feedback_release(
+                [feedback_row(1, "meal_cafe")],
+                output_dir=release,
+                leaf_ids=self.leaf_ids,
+                hmac_key=HMAC_KEY,
+            )
+            secure_path = release / "secure_image_index.jsonl"
+            secure = json.loads(secure_path.read_text(encoding="utf-8"))
+            secure["image_object_key"] = "../outside.jpg"
+            secure_path.write_text(json.dumps(secure) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "object key"):
+                materialize_actual_release(
+                    release_dir=release,
+                    actual_dir=root / "actual",
+                    categories_path=CATEGORIES,
+                    source_root=root / "private-storage",
+                )
 
 
 if __name__ == "__main__":

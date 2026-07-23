@@ -328,3 +328,21 @@ still must be replaced by a named, policy-controlled tunnel before production.
 - Current trained-head queue: 411 samples, 36 Top-1 mismatches, 330 uncertain samples, and 45 confident matches.
 - Human-reviewed error-mining rows are locked to `train`; they cannot establish deployment accuracy.
 - Verified 26 Python tests, Python bytecode compilation, JavaScript syntax, loopback/API security, and desktop/mobile layouts.
+
+## 2026-07-23 - Isolated actual-data labeling
+
+- Added `data/raw/cashlog33/actual` as the private destination for consented
+  CashLog images; it is separate from all public, proxy, and synthetic sources.
+- Added an idempotent importer for restricted feedback releases. It blocks path
+  traversal, strips EXIF/GPS by image re-encoding, uses SHA-256 filenames,
+  de-identifies sample IDs, and writes files/directories as `0600`/`0700`.
+- Local mirror imports remove the source only after the image and manifest are
+  durably committed. Supabase imports never delete remote originals.
+- Added an Airflow `materialize_actual_dataset` task after feedback export.
+  Rejected or nonconsented images cannot enter its secure source index.
+- Added `predeploy_labeler --actual` on loopback port `8012`, with a separate
+  unreviewed queue and output directory
+  `data/processed/cashlog33/actual_review/v1`.
+- Actual samples remain ineligible for training until a human confirms or
+  corrects their 33-leaf label. Approved actual rows are locked to `train`;
+  deployment accuracy still requires a separate untouched holdout.

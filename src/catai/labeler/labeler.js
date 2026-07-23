@@ -1,5 +1,7 @@
 const ui = {
   exportButton: document.querySelector("#export-button"),
+  appTitle: document.querySelector("#app-title"),
+  originalLabelTitle: document.querySelector("#original-label-title"),
   saveStatus: document.querySelector("#save-status"),
   metricTotal: document.querySelector("#metric-total"),
   metricMismatches: document.querySelector("#metric-mismatches"),
@@ -454,6 +456,16 @@ async function start() {
   bindEvents();
   try {
     state.payload = await request("/api/state");
+    state.mode = state.payload.default_mode || "errors";
+    document.title = `CashLog ${state.payload.ui_title || "데이터 검수"}`;
+    ui.appTitle.textContent = state.payload.ui_title || "배포 전 데이터 검수";
+    if (state.payload.dataset_kind === "actual") {
+      ui.originalLabelTitle.textContent = "사용자 확정 라벨";
+      ui.confirmOriginal.textContent = "사용자 라벨 확정";
+    }
+    for (const tab of ui.tabs) {
+      tab.setAttribute("aria-selected", String(tab.dataset.mode === state.mode));
+    }
     populateCategoryMenus();
     updateMetrics(state.payload.summary);
     applyFilters({ preserveSelection: false });

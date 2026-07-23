@@ -31,6 +31,55 @@ Open `http://127.0.0.1:8011`. The server refuses non-loopback hosts and origins.
 It must not be exposed through Cloudflare Tunnel, Tailscale Funnel, a reverse
 proxy, or router port forwarding.
 
+## Actual CashLog image queue
+
+Real CashLog feedback images are never mixed into the public/proxy source tree.
+The daily feedback DAG materializes only non-rejected images with explicit model
+improvement retention consent into this private tree:
+
+```text
+data/raw/cashlog33/actual/
+  images/<sha256-prefix>/<sha256>.jpg
+  manifest.jsonl
+  import_audit.jsonl
+  import_quarantine.jsonl
+  import_summary.json
+```
+
+The importer removes EXIF/GPS metadata, normalizes the image to JPEG, replaces
+the storage filename with a content hash, and omits user ID, object key, HMAC
+group ID, expense ID, and event ID from the labeling manifest. Files use mode
+`0600` and directories use `0700`. Supabase originals are not deleted by this
+import job; deletion and consent withdrawal are separate retention operations.
+
+Airflow runs the importer automatically after the de-identified export. To
+materialize an existing release manually from private Supabase Storage:
+
+```bash
+SUPABASE_URL=https://PROJECT.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=... \
+.venv/bin/python scripts/sync_cashlog_actual.py \
+  --release-dir data/feedback/releases/RELEASE_ID \
+  --fail-on-quarantine
+```
+
+Keep the service role key in the backend environment, never in shell history,
+the app, a manifest, or a command-line argument. For a local private-storage
+mirror, use `--source-root /private/mirror`; validated source files are removed
+only after the sanitized destination and manifest are durably committed.
+
+Start the separate actual-only labeler:
+
+```bash
+.venv/bin/python -m catai.predeploy_labeler --actual
+```
+
+Open `http://127.0.0.1:8012`. This preset reads only
+`data/raw/cashlog33/actual/manifest.jsonl`, starts on the unreviewed queue, and
+writes decisions only to `data/processed/cashlog33/actual_review/v1`. The proxy
+queue on port `8011` and all of its decisions remain untouched. Restart the
+actual labeler after a daily import to load newly arrived samples.
+
 To inspect another scored manifest:
 
 ```bash
@@ -49,6 +98,9 @@ immediately on the server; closing the browser does not lose progress.
 
 The default output directory is
 `data/processed/cashlog33/predeploy_review/v1`.
+
+The actual-only preset uses
+`data/processed/cashlog33/actual_review/v1` with the same file contract.
 
 | File | Purpose |
 | --- | --- |
@@ -99,3 +151,8 @@ The pre-deployment iteration is:
 After deployment, user confirmations and corrections enter the consent-based
 Airflow/MLflow feedback loop instead. The two sources remain distinguishable by
 `review_method` and are never silently mixed into the frozen holdout.
+
+Actual rows remain `pending` until the operator confirms, corrects, or rejects
+them in the actual-only tool. Only human-approved rows appear in its
+`training_manifest.jsonl`; they are locked to `train` and cannot be used to
+claim holdout accuracy.

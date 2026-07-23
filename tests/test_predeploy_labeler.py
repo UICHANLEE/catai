@@ -220,6 +220,39 @@ class PredeployLabelerTests(unittest.TestCase):
         with TestClient(app, base_url="http://labeler.example") as remote_client:
             self.assertEqual(403, remote_client.get("/api/state").status_code)
 
+    def test_actual_dataset_uses_a_separate_unreviewed_queue_and_export_contract(self) -> None:
+        actual_output = self.directory / "actual-review"
+        repository = ReviewRepository(
+            input_manifest=self.manifest,
+            categories_path=CATEGORIES,
+            output_dir=actual_output,
+            image_roots=[self.directory],
+            dataset_kind="actual",
+        )
+        state = repository.state()
+        self.assertEqual("actual", state["dataset_kind"])
+        self.assertEqual("unreviewed", state["default_mode"])
+        self.assertEqual("실데이터 라벨 검수", state["ui_title"])
+
+        repository.decide(
+            "sample:wrong",
+            DecisionPayload(
+                decision="approved",
+                selected_leaf_id="meal_grocery",
+                expected_revision=0,
+            ),
+        )
+        summary = repository.export()
+        exported = json.loads(
+            Path(summary["human_verified_manifest"])
+            .read_text(encoding="utf-8")
+            .strip()
+        )
+        self.assertEqual("actual", summary["dataset_kind"])
+        self.assertEqual("human_actual_labeler_v1", exported["review_method"])
+        self.assertEqual("train", exported["split_lock"])
+        self.assertTrue(str(actual_output) in summary["training_manifest"])
+
 
 if __name__ == "__main__":
     unittest.main()

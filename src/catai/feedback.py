@@ -193,13 +193,14 @@ def normalize_feedback_row(
         "reviewed_at": reviewed_at,
     }
     secure_image = None
-    if review_status == "approved" and image_consent and image_object_key:
+    if review_status != "rejected" and image_consent and image_object_key:
         secure_image = {
             "event_id": event_id,
             "sample_id": sample_id,
             "group_id": group_id,
             "leaf_id": selected_leaf_id,
             "image_object_key": image_object_key,
+            "review_status": review_status,
         }
     return safe_event, secure_image
 
@@ -266,7 +267,13 @@ def export_feedback_release(
         "source_rows": len(rows),
         "valid_events": len(events),
         "quarantined_events": len(quarantine),
-        "approved_image_references": len(secure_images),
+        "consented_image_references": len(secure_images),
+        "approved_image_references": sum(
+            row["review_status"] == "approved" for row in secure_images
+        ),
+        "pending_image_references": sum(
+            row["review_status"] == "pending" for row in secure_images
+        ),
         "review_status_counts": dict(sorted(status_counts.items())),
         "contains_user_ids": False,
         "secure_image_index_mode": "0600",

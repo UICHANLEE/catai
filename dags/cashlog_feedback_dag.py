@@ -61,6 +61,22 @@ with DAG(
         """,
     )
 
+    materialize_actual = BashOperator(
+        task_id="materialize_actual_dataset",
+        cwd="/workspace",
+        env=RUNTIME_ENV,
+        append_env=True,
+        bash_command="""
+        set -euo pipefail
+        RELEASE_DIR="{{ ti.xcom_pull(task_ids='export_feedback') }}"
+        python scripts/sync_cashlog_actual.py \
+          --release-dir "$RELEASE_DIR" \
+          --actual-dir /workspace/data/raw/cashlog33/actual \
+          --bucket cashlog-media \
+          --fail-on-quarantine
+        """,
+    )
+
     curate_feedback = BashOperator(
         task_id="curate_feedback",
         cwd="/workspace",
@@ -93,4 +109,6 @@ with DAG(
         """,
     )
 
-    validate_secrets >> export_feedback >> curate_feedback >> publish_gate
+    validate_secrets >> export_feedback
+    export_feedback >> [materialize_actual, curate_feedback]
+    curate_feedback >> publish_gate

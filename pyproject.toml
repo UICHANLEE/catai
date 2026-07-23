@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
+    "pillow>=10.0",
     "python-multipart>=0.0.9",
     "uvicorn[standard]>=0.30",
 ]
@@ -48,6 +49,7 @@ catai-report-cashlog = "catai.report:main"
 catai-serve-cashlog = "catai.cashlog_api:main"
 catai-label-cashlog = "catai.predeploy_labeler:main"
 catai-build-label-queue = "catai.predeploy_queue:main"
+catai-sync-cashlog-actual = "catai.actual_dataset:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
