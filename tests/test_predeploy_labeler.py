@@ -253,6 +253,30 @@ class PredeployLabelerTests(unittest.TestCase):
         self.assertEqual("train", exported["split_lock"])
         self.assertTrue(str(actual_output) in summary["training_manifest"])
 
+    def test_repository_refreshes_when_actual_manifest_is_appended(self) -> None:
+        initial = self.repository.state()
+        new_image = self.images / "sample-new.png"
+        new_image.write_bytes(PNG_BYTES)
+        new_row = manifest_row(
+            "sample:new",
+            new_image,
+            "meal_dining",
+            "meal_cafe",
+            "pending",
+        )
+        with self.manifest.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(new_row) + "\n")
+
+        refreshed = self.repository.state()
+
+        self.assertNotEqual(initial["manifest_sha256"], refreshed["manifest_sha256"])
+        self.assertEqual(4, refreshed["summary"]["total"])
+        self.assertIn("sample:new", {row["sample_id"] for row in refreshed["samples"]})
+
+    def test_labeler_client_polls_for_manifest_changes(self) -> None:
+        source = (ROOT / "src/catai/labeler/labeler.js").read_text(encoding="utf-8")
+        self.assertIn("window.setInterval(refreshManifest, 10000)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

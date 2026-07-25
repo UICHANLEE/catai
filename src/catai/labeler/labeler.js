@@ -421,6 +421,22 @@ async function exportTrainingData() {
   }
 }
 
+async function refreshManifest() {
+  if (state.busy || !state.payload) return;
+  try {
+    const nextPayload = await request("/api/state");
+    if (nextPayload.manifest_sha256 === state.payload.manifest_sha256) return;
+    const previousTotal = state.payload.summary.total;
+    state.payload = nextPayload;
+    updateMetrics(nextPayload.summary);
+    applyFilters();
+    const added = Math.max(0, nextPayload.summary.total - previousTotal);
+    showToast(added ? `새 실데이터 ${added}건을 불러왔습니다.` : "데이터 목록을 갱신했습니다.");
+  } catch (error) {
+    showToast(`자동 갱신 실패: ${error.message}`, true);
+  }
+}
+
 function bindEvents() {
   for (const tab of ui.tabs) {
     tab.addEventListener("click", () => {
@@ -469,6 +485,7 @@ async function start() {
     populateCategoryMenus();
     updateMetrics(state.payload.summary);
     applyFilters({ preserveSelection: false });
+    window.setInterval(refreshManifest, 10000);
   } catch (error) {
     ui.saveStatus.textContent = "불러오기 실패";
     showToast(error.message, true);

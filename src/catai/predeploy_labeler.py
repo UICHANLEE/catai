@@ -219,17 +219,48 @@ class ReviewRepository:
             raise ValueError("output directory must not overwrite the source manifest directory")
         self.decisions_path = self.output_dir / "decisions.jsonl"
         self.audit_path = self.output_dir / "decision_audit.jsonl"
+        self._lock = threading.RLock()
         self.manifest_sha256 = sha256_file(self.input_manifest)
         self.categories = load_categories(self.categories_path)
         self.category_by_id = {row["id"]: row for row in self.categories}
         self.leaf_ids = set(self.category_by_id)
         self.image_roots = [path.resolve() for path in (image_roots or [ROOT])]
         self._rows = read_jsonl(self.input_manifest)
-        self._lock = threading.RLock()
         self._samples: dict[str, dict[str, Any]] = {}
         self._sample_key_to_id: dict[str, str] = {}
         self._build_samples()
         self._decisions = self._load_decisions()
+
+    def refresh_if_changed(self) -> bool:
+        manifest_sha256 = sha256_file(self.input_manifest)
+        with self._lock:
+            if secrets.compare_digest(manifest_sha256, self.manifest_sha256):
+                return False
+            rows = read_jsonl(self.input_manifest)
+            previous = (
+                self.manifest_sha256,
+                self._rows,
+                self._samples,
+                self._sample_key_to_id,
+                self._decisions,
+            )
+            self.manifest_sha256 = manifest_sha256
+            self._rows = rows
+            self._samples = {}
+            self._sample_key_to_id = {}
+            try:
+                self._build_samples()
+                self._decisions = self._load_decisions()
+            except Exception:
+                (
+                    self.manifest_sha256,
+                    self._rows,
+                    self._samples,
+                    self._sample_key_to_id,
+                    self._decisions,
+                ) = previous
+                raise
+            return True
 
     def _resolve_image_path(self, row: dict[str, Any]) -> Path | None:
         raw_path = row.get("relative_path") or row.get("image_path") or row.get("path")
@@ -404,26 +435,28 @@ class ReviewRepository:
         }
 
     def state(self) -> dict[str, Any]:
-        ordered = sorted(
-            self._samples,
-            key=lambda sample_id: (-self._samples[sample_id]["priority"], sample_id),
-        )
-        return {
-            "schema_version": 1,
-            "dataset_kind": self.dataset_kind,
-            "default_mode": "unreviewed" if self.dataset_kind == "actual" else "errors",
-            "ui_title": (
-                "실데이터 라벨 검수"
-                if self.dataset_kind == "actual"
-                else "배포 전 데이터 검수"
-            ),
-            "input_manifest": str(self.input_manifest),
-            "manifest_sha256": self.manifest_sha256,
-            "output_dir": str(self.output_dir),
-            "categories": self.categories,
-            "summary": self.summary(),
-            "samples": [self.serialize_sample(sample_id) for sample_id in ordered],
-        }
+        self.refresh_if_changed()
+        with self._lock:
+            ordered = sorted(
+                self._samples,
+                key=lambda sample_id: (-self._samples[sample_id]["priority"], sample_id),
+            )
+            return {
+                "schema_version": 1,
+                "dataset_kind": self.dataset_kind,
+                "default_mode": "unreviewed" if self.dataset_kind == "actual" else "errors",
+                "ui_title": (
+                    "실데이터 라벨 검수"
+                    if self.dataset_kind == "actual"
+                    else "배포 전 데이터 검수"
+                ),
+                "input_manifest": str(self.input_manifest),
+                "manifest_sha256": self.manifest_sha256,
+                "output_dir": str(self.output_dir),
+                "categories": self.categories,
+                "summary": self.summary(),
+                "samples": [self.serialize_sample(sample_id) for sample_id in ordered],
+            }
 
     def image_path_for_key(self, sample_key: str) -> Path:
         sample_id = self._sample_key_to_id.get(sample_key)
@@ -635,6 +668,7 @@ def create_app(repository: ReviewRepository) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict[str, Any]:
+        repository.refresh_if_changed()
         return {
             "status": "ok",
             "scope": f"loopback-only-{repository.dataset_kind}-labeling",
