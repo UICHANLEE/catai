@@ -236,5 +236,7 @@ docker compose --env-file .runtime/cashlog-feedback.env up -d --force-recreate a
 
 `.runtime/cashlog-feedback.env`의 `SUPABASE_SERVICE_ROLE_KEY`에는 백엔드 전용
 `sb_secret_` 키 또는 기존 service-role JWT만 사용하며 Git에 커밋하지 않습니다.
+Airflow는 기본 5분마다 새 동의 이미지를 반입하며, 운영 환경에서는
+`CATAI_FEEDBACK_SCHEDULE`로 수집 주기를 조정할 수 있습니다.
 전용 화면은 `http://127.0.0.1:8012`이며 결과는
 `data/processed/cashlog33/actual_review/v1`에만 저장됩니다.

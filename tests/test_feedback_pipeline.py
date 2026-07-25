@@ -168,10 +168,10 @@ class FeedbackPipelineTests(unittest.TestCase):
             self.assertEqual(33, len(candidates))
             self.assertNotIn("image_object_key", candidates[0])
 
-    def test_airflow_collects_daily_without_triggering_unreviewed_training(self) -> None:
+    def test_airflow_collects_on_configured_schedule_without_unreviewed_training(self) -> None:
         dag_source = (ROOT / "dags/cashlog_feedback_dag.py").read_text(encoding="utf-8")
         self.assertIn('dag_id="cashlog_feedback_curation"', dag_source)
-        self.assertIn('schedule="@daily"', dag_source)
+        self.assertIn('os.getenv("CATAI_FEEDBACK_SCHEDULE", "*/5 * * * *")', dag_source)
         self.assertIn("SUPABASE_SERVICE_ROLE_KEY", dag_source)
         self.assertIn('task_id="materialize_actual_dataset"', dag_source)
         self.assertIn("scripts/sync_cashlog_actual.py", dag_source)

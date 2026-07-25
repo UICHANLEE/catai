@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -23,7 +24,7 @@ with DAG(
     dag_id="cashlog_feedback_curation",
     default_args=DEFAULT_ARGS,
     description="Export, de-identify, validate, and rank reviewed CashLog feedback.",
-    schedule="@daily",
+    schedule=os.getenv("CATAI_FEEDBACK_SCHEDULE", "*/5 * * * *"),
     start_date=datetime(2026, 7, 17),
     catchup=False,
     max_active_runs=1,
