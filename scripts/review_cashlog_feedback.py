@@ -6,11 +6,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from catai.feedback import supabase_backend_headers  # noqa: E402
 
 
 class RejectRedirects(HTTPRedirectHandler):
@@ -68,16 +75,18 @@ def apply_decision(
             "select": "event_id,review_status",
         }
     )
-    request = Request(
-        supabase_url.rstrip("/") + "/rest/v1/cashlog_category_feedback?" + query,
-        method="PATCH",
-        headers={
-            "apikey": service_role_key,
-            "Authorization": f"Bearer {service_role_key}",
+    headers = supabase_backend_headers(service_role_key)
+    headers.update(
+        {
             "Content-Type": "application/json",
             "Prefer": "return=representation",
             "User-Agent": "CataiFeedbackReviewer/1.0",
-        },
+        }
+    )
+    request = Request(
+        supabase_url.rstrip("/") + "/rest/v1/cashlog_category_feedback?" + query,
+        method="PATCH",
+        headers=headers,
         data=json.dumps(
             {
                 "review_status": decision,

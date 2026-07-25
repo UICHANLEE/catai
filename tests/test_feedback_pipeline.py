@@ -14,6 +14,7 @@ from catai.feedback import (
     export_feedback_release,
     load_leaf_ids,
     normalize_feedback_rows,
+    supabase_backend_headers,
 )
 
 
@@ -60,6 +61,21 @@ def feedback_row(
 class FeedbackPipelineTests(unittest.TestCase):
     def setUp(self) -> None:
         self.leaf_ids = load_leaf_ids(CATEGORIES)
+
+    def test_supabase_secret_key_uses_apikey_header_only(self) -> None:
+        key = "sb_secret_" + "a" * 32
+        self.assertEqual({"apikey": key}, supabase_backend_headers(key))
+
+    def test_supabase_legacy_service_role_key_keeps_bearer_header(self) -> None:
+        key = "eyJ" + "a" * 40
+        self.assertEqual(
+            {"apikey": key, "Authorization": f"Bearer {key}"},
+            supabase_backend_headers(key),
+        )
+
+    def test_supabase_publishable_key_is_rejected_for_backend_work(self) -> None:
+        with self.assertRaisesRegex(ValueError, "publishable"):
+            supabase_backend_headers("sb_publishable_" + "a" * 32)
 
     def test_export_deidentifies_rows_and_separates_restricted_image_paths(self) -> None:
         rows = [
@@ -161,6 +177,7 @@ class FeedbackPipelineTests(unittest.TestCase):
         self.assertIn("scripts/sync_cashlog_actual.py", dag_source)
         self.assertIn("--fail-on-quarantine", dag_source)
         self.assertIn("auto_training_allowed", dag_source)
+        self.assertNotIn("${#CASHLOG_FEEDBACK_HMAC_KEY}", dag_source)
         self.assertNotIn("TriggerDagRunOperator", dag_source)
 
     def test_actual_dataset_moves_only_consented_images_and_strips_identifiers(self) -> None:

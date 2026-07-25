@@ -227,11 +227,14 @@ manifest 계약은 `ml_docs/CASHLOG33_PREDEPLOY_LABELING.md`에 정리되어 있
 반입하고 전용 큐에서만 검수합니다.
 
 ```bash
+docker compose --env-file .runtime/cashlog-feedback.env up -d --force-recreate airflow
 .venv/bin/python scripts/sync_cashlog_actual.py \
   --release-dir data/feedback/releases/RELEASE_ID \
   --fail-on-quarantine
 .venv/bin/python -m catai.predeploy_labeler --actual
 ```
 
+`.runtime/cashlog-feedback.env`의 `SUPABASE_SERVICE_ROLE_KEY`에는 백엔드 전용
+`sb_secret_` 키 또는 기존 service-role JWT만 사용하며 Git에 커밋하지 않습니다.
 전용 화면은 `http://127.0.0.1:8012`이며 결과는
 `data/processed/cashlog33/actual_review/v1`에만 저장됩니다.

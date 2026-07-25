@@ -16,7 +16,12 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from catai.feedback import export_feedback_release, load_leaf_ids, read_jsonl  # noqa: E402
+from catai.feedback import (  # noqa: E402
+    export_feedback_release,
+    load_leaf_ids,
+    read_jsonl,
+    supabase_backend_headers,
+)
 
 
 DEFAULT_CATEGORIES = ROOT / "configs/cashlog/categories.json"
@@ -93,16 +98,18 @@ def fetch_supabase_rows(
     rows: list[dict[str, Any]] = []
     start = 0
     while True:
-        request = Request(
-            url,
-            headers={
-                "apikey": service_role_key,
-                "Authorization": f"Bearer {service_role_key}",
+        headers = supabase_backend_headers(service_role_key)
+        headers.update(
+            {
                 "Accept": "application/json",
                 "Range-Unit": "items",
                 "Range": f"{start}-{start + page_size - 1}",
                 "User-Agent": "CataiFeedbackExporter/1.0",
-            },
+            }
+        )
+        request = Request(
+            url,
+            headers=headers,
         )
         with NO_REDIRECT_OPENER.open(request, timeout=30) as response:
             if urlparse(response.geturl()).netloc != parsed_url.netloc:

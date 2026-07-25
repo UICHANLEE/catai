@@ -20,7 +20,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from catai.feedback import load_leaf_ids, read_jsonl
+from catai.feedback import load_leaf_ids, read_jsonl, supabase_backend_headers
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -166,8 +166,6 @@ def fetch_private_supabase_image(
     maximum_bytes: int,
 ) -> bytes:
     base_url, parsed = _validate_supabase_url(supabase_url)
-    if not service_role_key or len(service_role_key) < 32:
-        raise ValueError("Supabase service role key is missing or unexpectedly short")
     if not BUCKET_PATTERN.fullmatch(bucket):
         raise ValueError("invalid Supabase storage bucket name")
     safe_key = _safe_object_key(object_key)
@@ -175,15 +173,14 @@ def fetch_private_supabase_image(
         f"{base_url}/storage/v1/object/authenticated/"
         f"{quote(bucket, safe='')}/{quote(safe_key, safe='/-._~')}"
     )
-    request = Request(
-        endpoint,
-        headers={
-            "apikey": service_role_key,
-            "Authorization": f"Bearer {service_role_key}",
+    headers = supabase_backend_headers(service_role_key)
+    headers.update(
+        {
             "Accept": "image/*,application/octet-stream;q=0.8",
             "User-Agent": "CataiActualDataset/1.0",
-        },
+        }
     )
+    request = Request(endpoint, headers=headers)
     with NO_REDIRECT_OPENER.open(request, timeout=45) as response:
         response_url = urlparse(response.geturl())
         if (

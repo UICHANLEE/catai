@@ -40,7 +40,7 @@ with DAG(
         test -n "${SUPABASE_URL:-}"
         test -n "${SUPABASE_SERVICE_ROLE_KEY:-}"
         test -n "${CASHLOG_FEEDBACK_HMAC_KEY:-}"
-        test "${#CASHLOG_FEEDBACK_HMAC_KEY}" -ge 32
+        python -c 'import os; assert len(os.environ["CASHLOG_FEEDBACK_HMAC_KEY"]) >= 32'
         test -f configs/cashlog/categories.json
         """,
     )

@@ -19,6 +19,20 @@ ALLOWED_SOURCES = {"accepted_prediction", "top3_selection", "manual_edit"}
 ALLOWED_REVIEW_STATUSES = {"pending", "approved", "rejected"}
 
 
+def supabase_backend_headers(api_key: str) -> dict[str, str]:
+    """Build server-only headers for current and legacy Supabase API keys."""
+
+    key = str(api_key or "").strip()
+    if len(key) < 32:
+        raise ValueError("Supabase backend API key is missing or unexpectedly short")
+    if key.startswith("sb_publishable_"):
+        raise ValueError("Supabase publishable keys cannot be used for backend exports")
+    headers = {"apikey": key}
+    if not key.startswith("sb_secret_"):
+        headers["Authorization"] = f"Bearer {key}"
+    return headers
+
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
