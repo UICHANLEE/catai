@@ -98,6 +98,28 @@ def stratified_split(rows: list[dict[str, Any]], seed: int) -> dict[str, list[di
     return output
 
 
+def resolve_splits(
+    rows: list[dict[str, Any]], seed: int
+) -> dict[str, list[dict[str, Any]]]:
+    explicit = [str(row.get("split") or "") for row in rows]
+    if not any(explicit):
+        return stratified_split(rows, seed)
+    if not all(explicit):
+        raise ValueError("manifest cannot mix explicit and implicit split rows")
+
+    output: dict[str, list[dict[str, Any]]] = {"train": [], "val": [], "test": []}
+    for row, split in zip(rows, explicit, strict=True):
+        if split not in output:
+            raise ValueError(f"invalid explicit split for {row.get('sample_id')}: {split}")
+        split_lock = str(row.get("split_lock") or "")
+        if split_lock and split_lock != split:
+            raise ValueError(
+                f"split_lock mismatch for {row.get('sample_id')}: {split_lock} != {split}"
+            )
+        output[split].append(row)
+    return output
+
+
 def augmented_views(image: Image.Image) -> list[Image.Image]:
     width, height = image.size
     crop_x = max(1, round(width * 0.05))
@@ -270,7 +292,12 @@ def main() -> None:
     scored_rows = read_jsonl(args.scored_manifest)
     categories = json.loads(args.categories.read_text(encoding="utf-8"))
     category_order = [str(row["id"]) for row in categories]
-    supported = [leaf_id for leaf_id in category_order if leaf_id in {str(row["leaf_id"]) for row in rows}]
+    manifest_source_counts = dict(
+        sorted(Counter(str(row.get("source") or "unknown") for row in rows).items())
+    )
+    locked_train_rows = sum(
+        str(row.get("split_lock") or "") == "train" for row in rows
+    )
     additional_rows = validate_additional_train_rows(
         [
             row
@@ -280,13 +307,20 @@ def main() -> None:
         base_rows=rows,
         allowed_leaves=set(category_order),
     )
-    splits = stratified_split(rows, args.seed)
+    splits = resolve_splits(rows, args.seed)
+    train_leaves = {str(row["leaf_id"]) for row in splits["train"]}
+    val_leaves = {str(row["leaf_id"]) for row in splits["val"]}
+    test_leaves = {str(row["leaf_id"]) for row in splits["test"]}
+    if (val_leaves | test_leaves) - train_leaves:
+        missing = sorted((val_leaves | test_leaves) - train_leaves)
+        raise RuntimeError(f"validation/test leaves missing from train split: {missing}")
+    supported = [leaf_id for leaf_id in category_order if leaf_id in test_leaves]
     split_counts = {
         split: dict(sorted(Counter(str(row["leaf_id"]) for row in split_rows).items()))
         for split, split_rows in splits.items()
     }
-    if set(split_counts["train"]) != set(supported) or set(split_counts["test"]) != set(supported):
-        raise RuntimeError("every supported visual leaf must have train and test examples")
+    if not supported:
+        raise RuntimeError("the visual manifest requires at least one test leaf")
 
     started = time.perf_counter()
     if args.base_embedding_cache:
@@ -409,12 +443,14 @@ def main() -> None:
         and test_metrics["macro_f1"] > baseline_metrics["macro_f1"]
     )
     model_sha256 = hashlib.sha256((args.vision_model / "model.safetensors").read_bytes()).hexdigest()
+    training_manifest_sha256 = hashlib.sha256(args.manifest.read_bytes()).hexdigest()
     artifact = {
         "schema_version": 1,
         "model": selected_head,
         "classes": [str(value) for value in selected_head.classes_],
         "supported_leaves": trained_leaves,
         "vision_model_sha256": model_sha256,
+        "training_manifest_sha256": training_manifest_sha256,
         "selected_c": selected_c,
         "created_at": utc_now(),
     }
@@ -424,6 +460,11 @@ def main() -> None:
         "schema_version": 1,
         "generated_at": utc_now(),
         "dataset": "Open Images V7 validation source-label proxy",
+        "training_manifest": str(args.manifest),
+        "training_manifest_sha256": training_manifest_sha256,
+        "manifest_rows": len(rows),
+        "manifest_source_counts": manifest_source_counts,
+        "locked_train_rows": locked_train_rows,
         "supported_leaf_count": len(supported),
         "trained_leaf_count": len(trained_leaves),
         "taxonomy_leaf_count": len(category_order),
@@ -495,6 +536,8 @@ def main() -> None:
             mlflow.log_params(
                 {
                     "component": "siglip2_linear_head",
+                    "manifest_rows": len(rows),
+                    "locked_train_rows": locked_train_rows,
                     "supported_leaf_count": len(supported),
                     "trained_leaf_count": len(trained_leaves),
                     "selected_c": selected_c,

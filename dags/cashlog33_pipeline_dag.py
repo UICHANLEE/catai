@@ -22,6 +22,7 @@ RUNTIME_ENV = {
 }
 
 TEXT_DIR = "data/processed/cashlog33/text/v2"
+VISUAL_DIR = "data/processed/cashlog33/training/airflow_latest"
 CANDIDATE_ROOT = "checkpoints/cashlog33/airflow_latest"
 CANDIDATE_CONFIG = "configs/cashlog/hybrid.airflow-candidate.json"
 CANDIDATE_REPORT = "reports/cashlog33/airflow_latest"
@@ -50,6 +51,7 @@ with DAG(
         test -f configs/cashlog/ocr_lexicon.json
         test -f data/raw/cashlog33/text/us-bank-transactions-v2/transactions-synthetic.csv
         test -f data/raw/cashlog33/openimages_v7/manifest.jsonl
+        test -f checkpoints/cashlog33/vision_head_v1/split_manifest.jsonl
         test -f models/siglip2-base-patch16-224/model.safetensors
         test -f models/rapidocr/PP-OCRv6_det_small.onnx
         test -f models/rapidocr/ch_ppocr_mobile_v2.0_cls_mobile.onnx
@@ -80,6 +82,22 @@ PY
           --output-dir {TEXT_DIR} \
           --max-source-per-leaf 1200 \
           --synthetic-per-leaf 480
+        """,
+    )
+
+    build_visual_dataset = BashOperator(
+        task_id="build_visual_dataset",
+        cwd="/workspace",
+        env=RUNTIME_ENV,
+        append_env=True,
+        bash_command=f"""
+        set -euo pipefail
+        python scripts/build_cashlog33_incremental_dataset.py \
+          --base-manifest data/raw/cashlog33/openimages_v7/manifest.jsonl \
+          --base-split-manifest checkpoints/cashlog33/vision_head_v1/split_manifest.jsonl \
+          --optional-additional-train-manifest \
+            data/processed/cashlog33/actual_review/v1/training_manifest.jsonl \
+          --output-dir {VISUAL_DIR}
         """,
     )
 
@@ -127,7 +145,7 @@ PY
         bash_command=f"""
         set -euo pipefail
         python scripts/train_cashlog33_vision_head.py \
-          --manifest data/raw/cashlog33/openimages_v7/manifest.jsonl \
+          --manifest {VISUAL_DIR}/manifest.jsonl \
           --scored-manifest data/raw/cashlog33/openimages_v7/scored_manifest.jsonl \
           --vision-model models/siglip2-base-patch16-224 \
           --output-dir {CANDIDATE_ROOT}/vision \
@@ -204,8 +222,13 @@ PY
         """,
     )
 
-    validate_inputs >> [build_text_dataset, score_visual_proxy, generate_e2e_fixtures]
+    validate_inputs >> [
+        build_text_dataset,
+        build_visual_dataset,
+        score_visual_proxy,
+        generate_e2e_fixtures,
+    ]
     build_text_dataset >> train_text
-    score_visual_proxy >> train_vision_head
+    [build_visual_dataset, score_visual_proxy] >> train_vision_head
     [train_text, train_vision_head] >> build_candidate_config
     [build_candidate_config, generate_e2e_fixtures] >> evaluate_candidate >> select_candidate

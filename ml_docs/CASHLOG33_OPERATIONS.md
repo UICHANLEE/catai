@@ -62,13 +62,14 @@ curl --fail --header "X-Internal-API-Key: $CATAI_INTERNAL_API_KEY" \
 The DAG `cashlog33_training_pipeline` executes:
 
 1. Validate source artifacts, model files, and the exact 33-label contract.
-2. Rebuild the revision-pinned text dataset.
-3. Re-score the visual proxy and train the SigLIP2 linear head.
-4. Train and calibrate the text classifier.
-5. Build a checksum-pinned isolated candidate config.
-6. Generate deterministic Korean receipt fixtures.
-7. Evaluate hybrid E2E behavior and log artifacts to MLflow.
-8. Apply integration and production promotion gates.
+2. Merge the frozen visual dataset with available human-approved actual rows.
+3. Rebuild the revision-pinned text dataset.
+4. Re-score the visual proxy and train the SigLIP2 head from the merged manifest.
+5. Train and calibrate the text classifier.
+6. Build a checksum-pinned isolated candidate config.
+7. Generate deterministic Korean receipt fixtures.
+8. Evaluate hybrid E2E behavior and log artifacts to MLflow.
+9. Apply integration and production promotion gates.
 
 It writes candidates to `checkpoints/cashlog33/airflow_latest`, reports to
 `reports/cashlog33/airflow_latest`, and never modifies

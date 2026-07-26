@@ -160,21 +160,40 @@ claim holdout accuracy.
 
 ## Incremental vision-head retraining
 
-The vision-head trainer accepts one or more human-approved, train-locked
-manifests. All 33 taxonomy leaves are eligible, even when a leaf was absent from
-the original Open Images visual proxy. Reusing the frozen base embedding cache
-keeps the validation/test split unchanged and sends only the new images through
-SigLIP2:
+First create a versioned training dataset that combines the complete existing
+visual dataset with every newly approved row. The builder preserves the original
+411-row train/validation/test contract and adds reviewed actual rows to `train`
+only. It verifies sample IDs, SHA-256 image hashes, human approval, image
+availability, and the 33-leaf taxonomy:
+
+```bash
+.venv/bin/python scripts/build_cashlog33_incremental_dataset.py \
+  --base-manifest data/raw/cashlog33/openimages_v7/manifest.jsonl \
+  --base-split-manifest \
+    checkpoints/cashlog33/vision_head_v1/split_manifest.jsonl \
+  --additional-train-manifest \
+    data/processed/cashlog33/actual_review/v1/training_manifest.jsonl \
+  --output-dir data/processed/cashlog33/training/incremental_v1
+```
+
+Train from that single merged manifest. Do not pass the old base embedding cache
+for the first run of a new dataset version; all existing and new rows must be
+embedded from the same versioned input:
 
 ```bash
 .venv/bin/python scripts/train_cashlog33_vision_head.py \
-  --additional-train-manifest \
-    data/processed/cashlog33/actual_review/v1/training_manifest.jsonl \
-  --base-embedding-cache \
-    checkpoints/cashlog33/vision_head_v1/embedding_cache.npz \
-  --output-dir checkpoints/cashlog33/vision_head_actual_v1 \
-  --device mps
+  --manifest data/processed/cashlog33/training/incremental_v1/manifest.jsonl \
+  --scored-manifest data/raw/cashlog33/openimages_v7/scored_manifest.jsonl \
+  --output-dir checkpoints/cashlog33/vision_head_merged_v1 \
+  --device mps \
+  --mlflow-tracking-uri http://127.0.0.1:5500 \
+  --mlflow-run-name cashlog33-vision-head-merged-v1
 ```
+
+The merged manifest and summary live under ignored private data storage. The
+model artifact records its manifest SHA-256, while MLflow records the hash,
+source counts, split counts, metrics, and artifacts without uploading private
+images.
 
 Known reviewed training examples may be used as regression checks, but their
 accuracy is training fit rather than deployment evidence. A candidate replaces

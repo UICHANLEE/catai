@@ -368,3 +368,28 @@ still must be replaced by a named, policy-controlled tunnel before production.
   fixed the known training example but did not improve any untouched accuracy
   metric, so `configs/cashlog/hybrid.serving.json` and its pinned hash were not
   changed.
+
+## 2026-07-27 - Full merged-dataset retraining correction
+
+- Replaced the implicit embedding append workflow with an explicit, versioned
+  merged dataset. It contains all 411 existing Open Images rows plus 2 reviewed
+  actual rows: 413 total, split into train 269 / validation 62 / test 82.
+- Preserved every original split from
+  `checkpoints/cashlog33/vision_head_v1/split_manifest.jsonl`. Both actual rows
+  remain human-approved and locked to train.
+- The merged manifest SHA-256 is
+  `40e4213cea8eaaac58cf445de7a5554b2641d1def717a2b2a12721ecb9ff83a5`.
+  Its versioned location is
+  `data/processed/cashlog33/training/incremental_v1/manifest.jsonl`.
+- Re-embedded the full merged dataset on MPS without the old embedding cache:
+  1,076 augmented train views, 62 validation images, and 82 test images in
+  34.88 seconds.
+- MLflow run `c1e9f769ca6449758da120512e013e4a` records candidate
+  `cashlog33-vision-head-merged-v1`.
+- Validation remained Top-1 75.81%, Top-3 96.77%, macro-F1 72.60%; test remained
+  Top-1 79.27%, Top-3 93.90%, macro-F1 80.94%.
+- The 99-row synthetic E2E result also remained Top-1 98.99%, Top-3 98.99%, and
+  macro-F1 98.96%. The two reviewed training rows scored 2/2.
+- Promotion decision remains **no replacement**: the candidate learned the known
+  rows but did not improve an untouched metric. The current serving config is
+  unchanged.

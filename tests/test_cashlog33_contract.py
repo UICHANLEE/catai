@@ -11,7 +11,10 @@ from fastapi import HTTPException
 
 from catai.cashlog_api import validate_image, verify_internal_api_key
 from catai.cashlog_hybrid_classifier import CashlogHybridClassifier
-from scripts.train_cashlog33_vision_head import validate_additional_train_rows
+from scripts.train_cashlog33_vision_head import (
+    resolve_splits,
+    validate_additional_train_rows,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +51,24 @@ class Cashlog33ContractTests(unittest.TestCase):
                 allowed_leaves={"housing_fee"},
             ),
         )
+
+    def test_explicit_training_splits_preserve_train_lock(self) -> None:
+        rows = [
+            {
+                "sample_id": "actual:1",
+                "leaf_id": "meal_dining",
+                "split": "train",
+                "split_lock": "train",
+            },
+            {"sample_id": "base:1", "leaf_id": "meal_dining", "split": "test"},
+        ]
+        splits = resolve_splits(rows, seed=250716)
+        self.assertEqual(["actual:1"], [row["sample_id"] for row in splits["train"]])
+        self.assertEqual(["base:1"], [row["sample_id"] for row in splits["test"]])
+
+        rows[0]["split"] = "val"
+        with self.assertRaisesRegex(ValueError, "split_lock mismatch"):
+            resolve_splits(rows, seed=250716)
 
     def setUp(self) -> None:
         self.categories = json.loads(
