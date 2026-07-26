@@ -393,3 +393,46 @@ still must be replaced by a named, policy-controlled tunnel before production.
 - Promotion decision remains **no replacement**: the candidate learned the known
   rows but did not improve an untouched metric. The current serving config is
   unchanged.
+
+## 2026-07-27 - Uncapped all-data MPS retraining
+
+- Removed the text source cap and consumed all 60,000 expense-mappable source rows
+  plus all 15,840 generated rows. The remaining 8,000 source rows describe income
+  or transfers and have no valid target in the 33 expense leaves.
+- Built a 75,840-row text manifest: 59,685 train, 8,067 validation, and 8,088
+  test. MLflow run `7f6249fb766141de8c9487c8aacfd9d6` reached test Top-1
+  `0.9984`, Top-3 `1.0000`, and macro-F1 `0.9983`.
+- Built the general visual manifest from all 411 Open Images rows, all 61
+  license-checked weak Openverse rows, and both approved actual rows: 474 source
+  images. Weak rows are train-only; the fixed 62/82 proxy validation/test images
+  remain untouched.
+- MPS encoded all 1,320 augmented training views plus all validation/test images.
+  MLflow run `de2293b95dc748c1881b84af6becdab0` reached test Top-1 `0.8049`,
+  Top-3 `0.9390`, and macro-F1 `0.7903`. Top-1 improved over `0.7927`, while
+  macro-F1 declined from `0.8094`; this proxy head was therefore required to pass
+  the full hybrid regression gate before selection.
+- Auditing the UECFood override found that substring matching treated `tea` as a
+  match inside `steak` and `steamed`, and ingredient words incorrectly fabricated
+  grocery labels from prepared dishes. Those runs were rejected. Overrides now use
+  word-boundary matching and only map prepared-food dining/cafe semantics.
+- The corrected mapping consumes all 31,395 UECFood images: 29,002 dining and
+  2,393 cafe, with 26,686 train and 4,709 deterministic validation images. Existing
+  specialist baseline run `ba17031e68274ec0a56357e78a4e05bd` scored Top-1
+  `0.9620` and minimum leaf recall `0.9610`.
+- The all-data MPS fine-tune consumed the complete train split in one epoch.
+  MLflow runs `c4bcdab3b4db411e96f03227409bfc65` and
+  `48ecc29e0a5d442cbddc3ab233efbe2e` scored Top-1 `0.9565` and minimum
+  leaf recall `0.9443`. It passed the 95% gate but regressed, so it was not
+  selected over the stronger existing specialist.
+- On the fixed 99-receipt synthetic integration set, serving baseline run
+  `a639c571ae6242cc8e75a698208a2a42` and all-data candidate run
+  `d4fbefd6292443c2989be88cb70d0853` both scored Top-1/Top-3 `0.9899`
+  and macro-F1 `0.9896`. Candidate p95 latency was `256.7ms` versus `274.6ms`.
+- Promotion decision: select `cashlog33-all-data-mps-v1` with the all-data
+  visual/text heads and the stronger existing meal specialist. Keep
+  `allow_auto_confirm=false`; these proxy and synthetic results do not establish
+  95% accuracy on a frozen real CashLog photo holdout.
+- Restarted the loopback-only macOS LaunchAgent. `/health` reports MPS, the selected
+  model version, and loaded/warmed artifacts. An authenticated multipart grocery
+  fixture returned `meal_grocery`, the selected model version, and the full
+  `siglip2+mobilenetv4+rapidocr+tfidf` member contract.

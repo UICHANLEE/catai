@@ -26,7 +26,12 @@ class IncrementalDatasetTests(unittest.TestCase):
         self.assertIn('task_id="build_visual_dataset"', source)
         self.assertIn("scripts/build_cashlog33_incremental_dataset.py", source)
         self.assertIn("--optional-additional-train-manifest", source)
+        self.assertIn("--weak-additional-train-manifest", source)
         self.assertIn("--manifest {VISUAL_DIR}/manifest.jsonl", source)
+        self.assertIn("--max-source-per-leaf 0", source)
+        self.assertIn("--class-weight none", source)
+        self.assertIn('task_id="validate_mps_meal_specialist"', source)
+        self.assertIn("--meal-specialist-checkpoint", source)
 
     def test_merges_reviewed_rows_into_train_and_preserves_base_splits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -126,6 +131,50 @@ class IncrementalDatasetTests(unittest.TestCase):
                     categories_path=CATEGORIES,
                     output_dir=root / "output",
                 )
+
+    def test_marks_licensed_openverse_rows_as_weak_train_only_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "weak.jpg"
+            image.write_bytes(b"weak-image")
+            base_manifest = root / "base.jsonl"
+            base_splits = root / "splits.jsonl"
+            weak_manifest = root / "weak.jsonl"
+            write_jsonl(base_manifest, [])
+            write_jsonl(base_splits, [])
+            write_jsonl(
+                weak_manifest,
+                [
+                    {
+                        "sample_id": "openverse:1",
+                        "leaf_id": "meal_grocery",
+                        "relative_path": str(image),
+                        "sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+                        "source": "openverse",
+                        "status": "accepted",
+                        "license": "by",
+                    }
+                ],
+            )
+
+            summary = build_incremental_dataset(
+                base_manifest=base_manifest,
+                base_split_manifest=base_splits,
+                additional_manifests=[],
+                weak_additional_manifests=[weak_manifest],
+                categories_path=CATEGORIES,
+                output_dir=root / "output",
+            )
+            rows = [
+                json.loads(line)
+                for line in (root / "output/manifest.jsonl").read_text().splitlines()
+            ]
+
+        self.assertEqual(1, summary["weak_additional_train_rows"])
+        self.assertEqual("train", rows[0]["split"])
+        self.assertEqual("train", rows[0]["split_lock"])
+        self.assertEqual("weak_label", rows[0]["review_status"])
+        self.assertTrue(rows[0]["weak_label"])
 
 
 if __name__ == "__main__":

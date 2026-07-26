@@ -1,19 +1,20 @@
 # CashLog 33-Leaf Model Design
 
 Status: implemented, locally served, production promotion blocked by the real-photo gate
-Decision date: 2026-07-17
+Decision date: 2026-07-27
 Taxonomy version: `13.33.1`
 
 ## 1. Decision
 
-The selected model family is `cashlog33-hybrid-v1.1-fast`:
+The selected model family is `cashlog33-all-data-mps-v1`:
 
 | Member | Role | Selected artifact |
 |---|---|---|
 | SigLIP2 base patch16 224 | Visual representation and zero-shot prior | `models/siglip2-base-patch16-224` |
-| Logistic linear head | CashLog visual proxy adaptation | `checkpoints/cashlog33/vision_head_v1/vision_head.joblib` |
+| Logistic linear head | CashLog visual proxy adaptation | `checkpoints/cashlog33/vision_head_all_data_v1/vision_head.joblib` |
+| MobileNetV4 prepared-food specialist | Redistribute only existing dining/cafe probability | `checkpoints/cashlog_meal2_mps_target95/best.pt` |
 | RapidOCR Korean PP-OCRv5 | Korean merchant/item text extraction | `models/rapidocr/korean_PP-OCRv5_rec_mobile.onnx` |
-| TF-IDF word/character SGD | Transaction and OCR text classification | `checkpoints/cashlog33/text_sgd_v2/text_model.joblib` |
+| TF-IDF word/character SGD | Transaction and OCR text classification | `checkpoints/cashlog33/text_all_data_v1/text_model.joblib` |
 | CashLog OCR lexicon | Explicit domain evidence and aliases | `configs/cashlog/ocr_lexicon.json` |
 
 The serving artifact is checksum-pinned in
@@ -21,6 +22,12 @@ The serving artifact is checksum-pinned in
 `guarded_integration_candidate`. It may recommend Top 3 categories, but it may not
 auto-confirm a category. Production promotion requires a frozen, manually labeled
 real-photo holdout to pass every gate in section 8.
+
+The 2026-07-27 all-data visual and text heads passed the fixed synthetic integration
+regression gate and are selected in the serving config. The all-UECFood fine-tuned
+specialist was not selected because its corrected validation Top-1 was `0.9565`,
+below the existing specialist's `0.9620`; the stronger checksum-pinned specialist
+remains selected.
 
 ## 2. System Boundary
 
@@ -47,11 +54,14 @@ flowchart TD
     V --> S["SigLIP2 embedding"]
     S --> Z["33-leaf zero-shot prior"]
     S --> H["CashLog linear head"]
+    V --> M["UECFood MobileNetV4 dining/cafe specialist"]
+    Z --> R["Preserve total meal mass"]
+    H --> R
+    M --> R
     V --> O["RapidOCR Korean"]
     O --> T["TF-IDF text classifier"]
     O --> L["Normalized domain lexicon"]
-    Z --> F["Weighted probability fusion"]
-    H --> F
+    R --> F["Weighted probability fusion"]
     T --> F
     L --> F
     F --> Q["Image-quality and semantic fallback"]
@@ -63,6 +73,9 @@ Fusion weights are configuration, not hard-coded model behavior:
 - With lexicon evidence: vision `0.25`, text `0.60`, lexicon `0.15`.
 - Without lexicon evidence: vision `0.85`, text `0.15`.
 - Vision itself blends zero-shot `0.30` and the trained linear head `0.70`.
+- The UECFood specialist cannot create meal probability or alter grocery/drink.
+  It only redistributes the total probability that SigLIP2 and the linear head
+  already assigned to `meal_dining` and `meal_cafe`.
 - Vision/text Top-1 agreement receives a `0.10` pre-normalization bonus.
 
 An unreadable image or a generic receipt with no category evidence falls back to
@@ -101,8 +114,8 @@ Response shape:
   ],
   "need_user_check": true,
   "error_code": "LOW_CONFIDENCE",
-  "model": "cashlog33-hybrid-v1.1-fast",
-  "engine": "siglip2+rapidocr+tfidf",
+  "model": "cashlog33-all-data-mps-v1",
+  "engine": "siglip2+mobilenetv4+rapidocr+tfidf",
   "evidence": {
     "ocr": {"text": "...", "lines": []},
     "matched_terms": {},
@@ -123,6 +136,8 @@ runtime.
 |---|---|---|
 | Text builder | Revision-pinned external CSV plus CashLog templates | JSONL manifest, class counts, quality report |
 | Visual collector | Open Images metadata APIs/files plus category mapping | Licensed image manifest with SHA-256 and attribution |
+| Visual merger | 411 Open Images, 61 weak Openverse, approved actual rows | Train/validation/test manifest with source and label-strength flags |
+| Meal specialist trainer | All 31,395 UECFood images plus prepared-food override map | MPS MobileNetV4 dining/cafe checkpoint, progress JSONL, metrics, MLflow run |
 | Visual scorer | Source-mapped manifest plus local SigLIP2 | Scored manifest and review status summary |
 | Text trainer | Grouped train/validation/test JSONL | Joblib model, metrics, MLflow run |
 | Vision trainer | Image manifest, scored manifest, SigLIP2 | Joblib head, metrics, MLflow run |
@@ -138,8 +153,10 @@ serving config. Promotion is a separate, explicit action.
 | Evaluation | Scope | Top-1 | Top-3 | Macro F1 |
 |---|---|---:|---:|---:|
 | SigLIP2 zero-shot | Open Images source-mapped proxy, 82 held-out images / 23 leaves | 0.5976 | 0.7073 | 0.5995 |
-| SigLIP2 linear head | Same proxy split | 0.7927 | 0.9390 | 0.8094 |
-| Text SGD | Synthetic/weak proxy, 3,876 rows / 33 leaves | 0.9972 | 0.9995 | 0.9981 |
+| SigLIP2 all-data linear head | Same proxy split, plus train-only weak/actual rows | 0.8049 | 0.9390 | 0.7903 |
+| Text SGD all-data | Synthetic/weak proxy, 8,088 held-out rows / 33 leaves | 0.9984 | 1.0000 | 0.9983 |
+| Existing meal specialist | Corrected UECFood validation, 4,709 images / 2 leaves | 0.9620 | 1.0000 | 0.8865 |
+| All-UECFood fine-tuned specialist, rejected | Same corrected validation | 0.9565 | 1.0000 | 0.8719 |
 | Full hybrid | Fixed Noto synthetic OCR integration, 99 receipts / 33 leaves | 0.9899 | 0.9899 | 0.9896 |
 
 These numbers are not real CashLog photo accuracy. The text rows are synthetic or

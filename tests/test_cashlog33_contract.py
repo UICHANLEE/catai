@@ -99,6 +99,19 @@ class Cashlog33ContractTests(unittest.TestCase):
         self.assertEqual("13.33.1", semantics["taxonomy_version"])
         self.assertEqual(semantics["taxonomy_version"], lexicon["taxonomy_version"])
 
+    def test_uecfood_scope_does_not_fabricate_grocery_or_drink_labels(self) -> None:
+        overrides = json.loads(
+            (
+                ROOT / "configs/cashlog/uecfood_category_overrides.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual("prepared_food_only", overrides["dataset_scope"])
+        self.assertEqual("meal_dining", overrides["default_leaf_id"])
+        self.assertEqual(
+            {"meal_cafe"},
+            {str(rule["leaf_id"]) for rule in overrides["leaf_keyword_rules"]},
+        )
+
     def test_airflow_candidate_uses_portable_relative_paths(self) -> None:
         config = json.loads(
             (ROOT / "configs/cashlog/hybrid.airflow-candidate.json").read_text(
@@ -181,6 +194,56 @@ class Cashlog33ContractTests(unittest.TestCase):
         )
         self.assertEqual([], reasons)
         self.assertEqual(scores, fused)
+
+    def test_meal_specialist_redistributes_only_existing_meal_mass(self) -> None:
+        vision = {leaf_id: 0.0 for leaf_id in [str(row["id"]) for row in self.categories]}
+        vision["meal_grocery"] = 0.10
+        vision["meal_dining"] = 0.20
+        vision["meal_cafe"] = 0.05
+        vision["meal_drink"] = 0.05
+        vision["transit_car"] = 0.60
+        specialist = {
+            "meal_grocery": 0.05,
+            "meal_dining": 0.10,
+            "meal_cafe": 0.80,
+            "meal_drink": 0.05,
+        }
+
+        blended = CashlogHybridClassifier._blend_meal_specialist(
+            vision, specialist, 0.65
+        )
+
+        meal_ids = ["meal_grocery", "meal_dining", "meal_cafe", "meal_drink"]
+        self.assertAlmostEqual(
+            sum(vision[leaf_id] for leaf_id in meal_ids),
+            sum(blended[leaf_id] for leaf_id in meal_ids),
+        )
+        self.assertEqual(vision["transit_car"], blended["transit_car"])
+        self.assertGreater(blended["meal_cafe"], vision["meal_cafe"])
+
+    def test_prepared_food_specialist_does_not_steal_grocery_or_drink_mass(self) -> None:
+        vision = {
+            "meal_grocery": 0.10,
+            "meal_dining": 0.20,
+            "meal_cafe": 0.05,
+            "meal_drink": 0.05,
+            "transit_car": 0.60,
+        }
+        specialist = {
+            "meal_dining": 0.10,
+            "meal_cafe": 0.90,
+        }
+
+        blended = CashlogHybridClassifier._blend_meal_specialist(
+            vision, specialist, 0.65
+        )
+
+        self.assertEqual(vision["meal_grocery"], blended["meal_grocery"])
+        self.assertEqual(vision["meal_drink"], blended["meal_drink"])
+        self.assertAlmostEqual(
+            vision["meal_dining"] + vision["meal_cafe"],
+            blended["meal_dining"] + blended["meal_cafe"],
+        )
 
     def test_image_validation_decodes_real_payload(self) -> None:
         image_path = ROOT / "data/processed/cashlog33/e2e_fixtures/v1/images/meal_cafe/fixture-00.jpg"

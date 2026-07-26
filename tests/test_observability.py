@@ -10,11 +10,14 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from PIL import Image
+from torch import nn
 
 from catai.cashlog_api import app
 from catai.telemetry import InferenceTelemetry, configure_json_logger, log_event
 from scripts.train_cashlog_category_from_uecfood import (
     Sample,
+    build_optimizer,
+    infer_cashlog_category,
     loss_weights_for_training,
 )
 
@@ -31,6 +34,16 @@ class DummyClassifier:
             "model": "test-model",
             "_timings_ms": {"vision": 12.0, "ocr": 20.0, "inference_total": 22.0},
         }
+
+
+class DummyTrainModel(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.backbone = nn.Linear(4, 4)
+        self.classifier = nn.Linear(4, 2)
+
+    def get_classifier(self) -> nn.Module:
+        return self.classifier
 
 
 class ObservabilityTests(unittest.TestCase):
@@ -95,6 +108,46 @@ class ObservabilityTests(unittest.TestCase):
         self.assertIsNotNone(weights)
         assert weights is not None
         self.assertGreater(float(weights[1]), float(weights[0]))
+        sqrt_weights = loss_weights_for_training(
+            samples,
+            2,
+            balanced_sampling=False,
+            power=0.5,
+        )
+        assert sqrt_weights is not None
+        self.assertLess(
+            float(sqrt_weights[1] / sqrt_weights[0]),
+            float(weights[1] / weights[0]),
+        )
+
+    def test_classifier_head_can_use_a_higher_learning_rate(self) -> None:
+        optimizer = build_optimizer(
+            DummyTrainModel(),
+            lr=5e-5,
+            head_lr=1e-3,
+            weight_decay=1e-4,
+        )
+        self.assertEqual([5e-5, 1e-3], [group["lr"] for group in optimizer.param_groups])
+
+    def test_uec_keyword_matching_does_not_treat_steak_as_tea(self) -> None:
+        overrides = {
+            "default_leaf_id": "meal_dining",
+            "leaf_keyword_rules": [
+                {"leaf_id": "meal_drink", "keywords": ["tea"]}
+            ],
+        }
+        self.assertEqual(
+            "meal_dining",
+            infer_cashlog_category("steak", overrides),
+        )
+        self.assertEqual(
+            "meal_dining",
+            infer_cashlog_category("steamed egg", overrides),
+        )
+        self.assertEqual(
+            "meal_drink",
+            infer_cashlog_category("green tea", overrides),
+        )
 
 
 if __name__ == "__main__":

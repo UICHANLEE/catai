@@ -266,6 +266,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--additional-train-manifest", type=Path, action="append", default=[])
     parser.add_argument("--base-embedding-cache", type=Path)
     parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument(
+        "--class-weight",
+        choices=["balanced", "none"],
+        default="balanced",
+    )
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
     parser.add_argument("--seed", type=int, default=250716)
     parser.add_argument("--mlflow-tracking-uri", default=os.getenv("MLFLOW_TRACKING_URI"))
@@ -414,7 +419,9 @@ def main() -> None:
     for c_value in [0.03, 0.10, 0.30, 1.0, 3.0, 10.0]:
         head = LogisticRegression(
             C=c_value,
-            class_weight="balanced",
+            class_weight=(
+                "balanced" if args.class_weight == "balanced" else None
+            ),
             max_iter=2000,
             random_state=args.seed,
             solver="lbfgs",
@@ -452,6 +459,7 @@ def main() -> None:
         "vision_model_sha256": model_sha256,
         "training_manifest_sha256": training_manifest_sha256,
         "selected_c": selected_c,
+        "class_weight": args.class_weight,
         "created_at": utc_now(),
     }
     head_path = args.output_dir / "vision_head.joblib"
@@ -475,6 +483,7 @@ def main() -> None:
         "base_embedding_cache": str(args.base_embedding_cache) if args.base_embedding_cache else None,
         "embedding_seconds": embedding_seconds,
         "selected_c": selected_c,
+        "class_weight": args.class_weight,
         "validation": validation_metrics,
         "test_linear_head": test_metrics,
         "test_zero_shot_same_split": baseline_metrics,
@@ -541,6 +550,7 @@ def main() -> None:
                     "supported_leaf_count": len(supported),
                     "trained_leaf_count": len(trained_leaves),
                     "selected_c": selected_c,
+                    "class_weight": args.class_weight,
                     "train_augmented_samples": len(train_labels),
                     "additional_train_rows": len(additional_rows),
                     "selected_for_hybrid": selected,

@@ -19,7 +19,12 @@ from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
 from torch.nn import functional as F
 from transformers import AutoModel, AutoProcessor
 
-from .cashlog_classifier import CategoryPrediction, _read_image, choose_device
+from .cashlog_classifier import (
+    CashlogCategoryClassifier,
+    CategoryPrediction,
+    _read_image,
+    choose_device,
+)
 
 
 class CashlogHybridClassifier:
@@ -81,6 +86,42 @@ class CashlogHybridClassifier:
         if not set(self.vision_head_classes).issubset(set(self.leaf_ids)):
             raise ValueError("vision head contains labels outside the 33-leaf taxonomy")
 
+        self.meal_specialist = None
+        self.meal_specialist_weight = 0.0
+        specialist_config = self.config.get("meal_specialist")
+        if specialist_config and bool(specialist_config.get("enabled", True)):
+            specialist_checkpoint = self._resolve_path(specialist_config["checkpoint"])
+            specialist_labels = self._resolve_path(specialist_config["labels"])
+            self._verify_expected_file(
+                specialist_checkpoint,
+                str(specialist_config["checkpoint_sha256"]),
+            )
+            self._verify_expected_file(
+                specialist_labels,
+                str(specialist_config["labels_sha256"]),
+            )
+            self.meal_specialist = CashlogCategoryClassifier(
+                checkpoint_path=specialist_checkpoint,
+                labels_path=specialist_labels,
+                device=str(self.device),
+            )
+            specialist_leaf_ids = {
+                str(category["id"]) for category in self.meal_specialist.categories
+            }
+            expected_meal_leaves = {
+                "meal_dining",
+                "meal_cafe",
+            }
+            if specialist_leaf_ids != expected_meal_leaves:
+                raise ValueError(
+                    "UECFood specialist must contain meal_dining and meal_cafe"
+                )
+            self.meal_specialist_weight = float(
+                specialist_config.get("blend_weight", 0.65)
+            )
+            if not 0.0 <= self.meal_specialist_weight <= 1.0:
+                raise ValueError("meal specialist blend_weight must be between 0 and 1")
+
         text_artifact = joblib.load(self.text_model_path)
         self.text_model = text_artifact["model"]
         self.text_temperature = float(text_artifact["temperature"])
@@ -126,9 +167,14 @@ class CashlogHybridClassifier:
     def _verify_file(self, path: Path, sha_key: str) -> None:
         if not path.exists():
             raise FileNotFoundError(f"hybrid model dependency not found: {path}")
-        expected = str(self.config[sha_key]).lower()
+        self._verify_expected_file(path, str(self.config[sha_key]))
+
+    @staticmethod
+    def _verify_expected_file(path: Path, expected: str) -> None:
+        if not path.exists():
+            raise FileNotFoundError(f"hybrid model dependency not found: {path}")
         actual = hashlib.sha256(path.read_bytes()).hexdigest()
-        if actual != expected:
+        if actual != expected.lower():
             raise ValueError(f"SHA-256 mismatch for {path}: expected {expected}, got {actual}")
 
     def _validate_contract(self) -> None:
@@ -200,7 +246,42 @@ class CashlogHybridClassifier:
             leaf_id: max(0.0, float(values.get(leaf_id, 0.0))) / total for leaf_id in leaf_ids
         }
 
-    def _vision_scores(self, image: Image.Image) -> dict[str, float]:
+    @staticmethod
+    def _blend_meal_specialist(
+        vision: dict[str, float],
+        specialist: dict[str, float],
+        weight: float,
+    ) -> dict[str, float]:
+        meal_leaves = {
+            "meal_grocery",
+            "meal_dining",
+            "meal_cafe",
+            "meal_drink",
+        }
+        supported_leaves = [
+            leaf_id for leaf_id in specialist if leaf_id in meal_leaves
+        ]
+        meal_mass = sum(
+            float(vision.get(leaf_id, 0.0)) for leaf_id in supported_leaves
+        )
+        specialist_total = sum(
+            max(0.0, float(specialist.get(leaf_id, 0.0)))
+            for leaf_id in supported_leaves
+        )
+        if meal_mass <= 0.0 or specialist_total <= 0.0 or weight <= 0.0:
+            return dict(vision)
+        output = dict(vision)
+        for leaf_id in supported_leaves:
+            specialist_share = (
+                max(0.0, float(specialist.get(leaf_id, 0.0))) / specialist_total
+            )
+            output[leaf_id] = (
+                (1.0 - weight) * float(vision.get(leaf_id, 0.0))
+                + weight * meal_mass * specialist_share
+            )
+        return output
+
+    def _vision_result(self, image: Image.Image) -> dict[str, Any]:
         inputs = self.vision_processor(images=[image], return_tensors="pt")
         inputs = self._move_vision_inputs(inputs)
         with torch.inference_mode():
@@ -227,7 +308,7 @@ class CashlogHybridClassifier:
         for index, leaf_id in enumerate(self.vision_head_classes):
             head[leaf_id] = float(head_probabilities[index])
         blend = self.config["vision_blend"]
-        return self._normalize(
+        vision = self._normalize(
             {
                 leaf_id: (
                     float(blend["zero_shot"]) * zero_shot[leaf_id]
@@ -237,6 +318,25 @@ class CashlogHybridClassifier:
             },
             self.leaf_ids,
         )
+        specialist_scores: dict[str, float] = {}
+        if self.meal_specialist is not None:
+            predictions = self.meal_specialist.predict(image, top_k=4)
+            specialist_scores = {
+                prediction.cashlog_leaf_id: float(prediction.confidence)
+                for prediction in predictions
+            }
+            vision = self._normalize(
+                self._blend_meal_specialist(
+                    vision,
+                    specialist_scores,
+                    self.meal_specialist_weight,
+                ),
+                self.leaf_ids,
+            )
+        return {
+            "scores": vision,
+            "meal_specialist_scores": specialist_scores,
+        }
 
     def _extract_ocr(self, image: Image.Image) -> dict[str, Any]:
         result = self.ocr(np.asarray(image))
@@ -403,17 +503,18 @@ class CashlogHybridClassifier:
 
         if self._executor is not None:
             vision_started = time.perf_counter()
-            vision_future = self._executor.submit(self._timed_call, self._vision_scores, pil_image)
+            vision_future = self._executor.submit(self._timed_call, self._vision_result, pil_image)
             ocr_future = self._executor.submit(self._timed_call, self._extract_ocr, pil_image)
-            vision, vision_ms = vision_future.result()
+            vision_result, vision_ms = vision_future.result()
             ocr, ocr_ms = ocr_future.result()
             parallel_ms = (time.perf_counter() - vision_started) * 1000.0
         else:
-            vision, vision_ms = self._timed_call(self._vision_scores, pil_image)
+            vision_result, vision_ms = self._timed_call(self._vision_result, pil_image)
             ocr, ocr_ms = self._timed_call(self._extract_ocr, pil_image)
             parallel_ms = vision_ms + ocr_ms
 
         fusion_started = time.perf_counter()
+        vision = vision_result["scores"]
         text = self._text_scores(str(ocr["text"]))
         lexicon, matched_terms = self._lexicon_scores(str(ocr["text"]))
         fused, weights = self._fuse(vision, text, lexicon, matched_terms)
@@ -440,6 +541,7 @@ class CashlogHybridClassifier:
             "margin": margin,
             "need_user_check": need_user_check,
             "vision_scores": vision,
+            "meal_specialist_scores": vision_result["meal_specialist_scores"],
             "text_scores": text,
             "lexicon_scores": lexicon,
             "matched_terms": matched_terms,
@@ -519,12 +621,26 @@ class CashlogHybridClassifier:
             "need_user_check": bool(result["need_user_check"]),
             "model": str(self.config["model_version"]),
             "taxonomy_version": str(self.config["taxonomy_version"]),
-            "engine": "siglip2+rapidocr+tfidf",
+            "engine": (
+                "siglip2+mobilenetv4+rapidocr+tfidf"
+                if self.meal_specialist is not None
+                else "siglip2+rapidocr+tfidf"
+            ),
             "members": [
                 {"name": "siglip2_vision_head", "weight": result["fusion_weights"]["vision"]},
                 {"name": "rapidocr_text_sgd", "weight": result["fusion_weights"]["text"]},
                 {"name": "cashlog_ocr_lexicon", "weight": result["fusion_weights"]["lexicon"]},
-            ],
+            ]
+            + (
+                [
+                    {
+                        "name": "uecfood_meal_specialist",
+                        "weight": self.meal_specialist_weight,
+                    }
+                ]
+                if self.meal_specialist is not None
+                else []
+            ),
             "evidence": {
                 "ocr": result["ocr"],
                 "image_quality": result["image_quality"],
@@ -533,6 +649,12 @@ class CashlogHybridClassifier:
                 "vision_top3": [
                     {"category": leaf_id, "confidence": float(score)}
                     for leaf_id, score in self._ranked(result["vision_scores"], 3)
+                ],
+                "meal_specialist_top4": [
+                    {"category": leaf_id, "confidence": float(score)}
+                    for leaf_id, score in self._ranked(
+                        result["meal_specialist_scores"], 4
+                    )
                 ],
                 "text_top3": [
                     {"category": leaf_id, "confidence": float(score)}

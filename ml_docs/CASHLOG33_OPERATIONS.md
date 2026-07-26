@@ -59,17 +59,34 @@ curl --fail --header "X-Internal-API-Key: $CATAI_INTERNAL_API_KEY" \
 
 ## Airflow Training
 
+Docker Desktop does not expose Apple MPS. The UECFood specialist therefore runs as
+a native macOS job and writes checksumable artifacts plus MLflow records:
+
+```bash
+.venv/bin/python scripts/launch_training.py cashlog_meal2_all_mps_target95
+tail -f logs/cashlog_meal2_all_mps_target95.log
+```
+
+This job has no per-class sample cap. It traverses all 31,395 UECFood images, uses
+MPS, and fails its promotion target unless validation Top-1 reaches 95%. Airflow
+does not silently retrain this member on CPU. It validates `device=mps`, the exact
+`meal_dining`/`meal_cafe` leaves, `target_met=true`, and the best checkpoint before composing a
+candidate.
+
 The DAG `cashlog33_training_pipeline` executes:
 
 1. Validate source artifacts, model files, and the exact 33-label contract.
-2. Merge the frozen visual dataset with available human-approved actual rows.
-3. Rebuild the revision-pinned text dataset.
-4. Re-score the visual proxy and train the SigLIP2 head from the merged manifest.
-5. Train and calibrate the text classifier.
-6. Build a checksum-pinned isolated candidate config.
-7. Generate deterministic Korean receipt fixtures.
-8. Evaluate hybrid E2E behavior and log artifacts to MLflow.
-9. Apply integration and production promotion gates.
+2. Validate the completed native MPS dining/cafe specialist and its 95% target.
+3. Merge all 411 Open Images, 61 licensed weak Openverse, and available
+   human-approved actual rows.
+4. Rebuild all 60,000 mapped source text rows plus 15,840 generated rows.
+5. Re-score the visual proxy and train the SigLIP2 head from the merged manifest.
+6. Train and calibrate the text classifier.
+7. Build a checksum-pinned isolated candidate config containing all three learned
+   members.
+8. Generate deterministic Korean receipt fixtures.
+9. Evaluate hybrid E2E behavior and log artifacts to MLflow.
+10. Apply integration and production promotion gates.
 
 It writes candidates to `checkpoints/cashlog33/airflow_latest`, reports to
 `reports/cashlog33/airflow_latest`, and never modifies
@@ -86,7 +103,8 @@ curl --user '<airflow-user>:<airflow-password>' \
 ```
 
 Use the Airflow Grid view for task state and per-task logs. MLflow experiment
-`cashlog33-hybrid-v2` stores component and E2E metrics. A failed training task retries
+`cashlog33-hybrid-v2` stores component and E2E metrics; native all-data runs use
+`cashlog33-all-data-mps`. A failed training task retries
 once after two minutes; the DAG has a four-hour timeout and only one active run.
 
 ## Jenkins Automation

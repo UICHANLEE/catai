@@ -5,7 +5,8 @@
 The production-aligned workflow is Airflow DAG
 `cashlog33_training_pipeline`. It rebuilds the 33-leaf text dataset, scores the
 visual proxy, trains the SigLIP2 linear head and text classifier, builds an isolated
-checksum-pinned candidate, evaluates fixed E2E fixtures, and applies promotion gates.
+checksum-pinned candidate, adds the native MPS prepared-food specialist, evaluates fixed
+E2E fixtures, and applies promotion gates.
 
 The verified run `codex-20260717T0411KST` finished successfully with 9 of 9 tasks.
 Candidate files are written to `checkpoints/cashlog33/airflow_latest` and
@@ -36,6 +37,43 @@ Primary records:
 - `ml_docs/CASHLOG33_PREDEPLOY_LABELING.md`
 - `ml_docs/CASHLOG33_RUN_LOG.md`
 - `reports/cashlog33/model_report/index.html`
+
+## All-data MPS run (2026-07-27)
+
+The selected hybrid consumes every local row with a valid training label and use
+permission:
+
+- UECFood: 31,395 images, no per-class sample cap, dining/cafe specialist on MPS.
+- General vision: 411 Open Images + 61 weak Openverse + 2 approved actual images.
+- Text: all 60,000 mapped external rows + all 15,840 generated rows.
+- E2E fixtures: 99 images remain evaluation-only to prevent leakage.
+
+Native MPS training:
+
+```bash
+.venv/bin/python scripts/launch_training.py cashlog_meal2_all_mps_target95
+tail -f logs/cashlog_meal2_all_mps_target95.log
+```
+
+The classifier head uses a higher learning rate than the pretrained backbone and a
+square-root inverse-frequency loss. Every epoch traverses the complete 26,686-image
+train split; 4,709 fixed validation images determine the 95% gate. Airflow validates
+the completed MPS artifact and refuses to substitute a Docker CPU artifact.
+
+The all-data fine-tuned specialist scored 95.65%, below the existing specialist's
+96.20% on the same corrected validation split, so it was retained as a rejected
+candidate. Serving uses the all-data visual/text heads with the stronger existing
+specialist. The fixed 33-leaf synthetic regression result remained 98.99%;
+`allow_auto_confirm` remains disabled until the real-photo holdout passes.
+
+Text generation is explicitly uncapped:
+
+```bash
+.venv/bin/python scripts/build_cashlog33_text_dataset.py \
+  --output-dir data/processed/cashlog33/text/all_v1 \
+  --max-source-per-leaf 0 \
+  --synthetic-per-leaf 480
+```
 
 ## Pre-deployment error review
 

@@ -1,19 +1,7 @@
 {
   "default_leaf_id": "meal_dining",
+  "dataset_scope": "prepared_food_only",
   "leaf_keyword_rules": [
-    {
-      "leaf_id": "meal_drink",
-      "keywords": [
-        "beer",
-        "wine",
-        "sake",
-        "cocktail",
-        "juice",
-        "tea",
-        "green tea",
-        "coffee"
-      ]
-    },
     {
       "leaf_id": "meal_cafe",
       "keywords": [
@@ -35,49 +23,6 @@
         "pudding",
         "jelly",
         "dessert"
-      ]
-    },
-    {
-      "leaf_id": "meal_grocery",
-      "keywords": [
-        "raw",
-        "vegetable",
-        "fruit",
-        "egg",
-        "tofu",
-        "kimchi"
-      ]
-    },
-    {
-      "leaf_id": "meal_dining",
-      "keywords": [
-        "rice",
-        "noodle",
-        "sushi",
-        "soup",
-        "curry",
-        "beef",
-        "pork",
-        "chicken",
-        "fish",
-        "salad",
-        "tempura",
-        "udon",
-        "soba",
-        "ramen",
-        "spaghetti",
-        "pasta",
-        "steak",
-        "cutlet",
-        "bowl",
-        "dumpling",
-        "fried",
-        "grilled",
-        "sauteed",
-        "hamburger",
-        "pizza",
-        "sandwich",
-        "takoyaki"
       ]
     }
   ]

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merge the frozen visual dataset with reviewed train-only CashLog samples."""
+"""Merge frozen, reviewed, and licensed weak-label visual training data."""
 
 from __future__ import annotations
 
@@ -82,9 +82,11 @@ def build_incremental_dataset(
     base_manifest: Path,
     base_split_manifest: Path,
     additional_manifests: list[Path],
+    weak_additional_manifests: list[Path] | None = None,
     categories_path: Path,
     output_dir: Path,
 ) -> dict[str, Any]:
+    weak_additional_manifests = weak_additional_manifests or []
     categories = json.loads(categories_path.read_text(encoding="utf-8"))
     category_ids = [str(row["id"]) for row in categories]
     if len(category_ids) != 33 or len(set(category_ids)) != 33:
@@ -148,9 +150,61 @@ def build_incremental_dataset(
         seen_hashes[sha256] = sample_id
         reviewed_train.append({**row, "split": "train"})
 
+    weak_rows = [
+        row
+        for manifest in weak_additional_manifests
+        for row in read_jsonl(manifest)
+    ]
+    weak_by_id = index_unique(weak_rows, "weak additional")
+    overlap = sorted((set(base_by_id) | set(additional_by_id)) & set(weak_by_id))
+    if overlap:
+        raise ValueError(
+            f"weak additional sample_id already exists in another dataset: {overlap[0]}"
+        )
+
+    weak_train: list[dict[str, Any]] = []
+    allowed_weak_licenses = {"by", "cc0", "pdm"}
+    for sample_id, row in weak_by_id.items():
+        leaf_id = str(row.get("leaf_id") or "")
+        if leaf_id not in allowed_leaves:
+            raise ValueError(
+                f"weak additional sample {sample_id} uses an unknown taxonomy leaf"
+            )
+        if str(row.get("source") or "") != "openverse":
+            raise ValueError(
+                f"weak additional sample {sample_id} is not from Openverse"
+            )
+        if str(row.get("status") or "") != "accepted":
+            raise ValueError(
+                f"weak additional sample {sample_id} was not accepted by collection"
+            )
+        if str(row.get("license") or "").casefold() not in allowed_weak_licenses:
+            raise ValueError(
+                f"weak additional sample {sample_id} has an unsupported license"
+            )
+        validate_image_hash(row)
+        sha256 = str(row["sha256"]).lower()
+        if sha256 in seen_hashes:
+            raise ValueError(
+                f"weak additional sample {sample_id} duplicates image from "
+                f"{seen_hashes[sha256]}"
+            )
+        seen_hashes[sha256] = sample_id
+        weak_train.append(
+            {
+                **row,
+                "split": "train",
+                "split_lock": "train",
+                "review_status": "weak_label",
+                "label_method": "openverse_query_leaf_v1",
+                "weak_label": True,
+            }
+        )
+
     merged_rows = [
         *ordered_base["train"],
         *sorted(reviewed_train, key=lambda row: str(row["sample_id"])),
+        *sorted(weak_train, key=lambda row: str(row["sample_id"])),
         *ordered_base["val"],
         *ordered_base["test"],
     ]
@@ -171,6 +225,7 @@ def build_incremental_dataset(
         "taxonomy_leaf_count": len(category_ids),
         "base_rows": len(base_rows),
         "additional_train_rows": len(reviewed_train),
+        "weak_additional_train_rows": len(weak_train),
         "merged_rows": len(merged_rows),
         "split_counts": dict(sorted(split_counts.items())),
         "source_counts": dict(sorted(source_counts.items())),
@@ -186,6 +241,13 @@ def build_incremental_dataset(
                     "sha256": file_sha256(path),
                 }
                 for path in additional_manifests
+            ],
+            "weak_additional_manifests": [
+                {
+                    "path": str(path.resolve()),
+                    "sha256": file_sha256(path),
+                }
+                for path in weak_additional_manifests
             ],
         },
         "output_manifest": str(manifest_path),
@@ -216,6 +278,12 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
     )
+    parser.add_argument(
+        "--weak-additional-train-manifest",
+        type=Path,
+        action="append",
+        default=[],
+    )
     parser.add_argument("--categories", type=Path, default=DEFAULT_CATEGORIES)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     return parser.parse_args()
@@ -235,6 +303,7 @@ def main() -> None:
             *args.additional_train_manifest,
             *optional_manifests,
         ],
+        weak_additional_manifests=args.weak_additional_train_manifest,
         categories_path=args.categories,
         output_dir=args.output_dir,
     )

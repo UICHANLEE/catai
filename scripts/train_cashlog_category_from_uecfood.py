@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Train a Cashlog category classifier from the currently available UECFood data.
 
-This is aligned with the Cashlog B-plan document: evaluate final expense
-categories, not 256 fine-grained food names. UECFood only covers food-like
-categories, so this script trains on the subset it can honestly label:
-`식비` and `카페/간식`.
+This evaluates CashLog expense leaves rather than 256 fine-grained food names.
+UECFood contains prepared-food images, so the production-aligned override maps
+every image to the labels it can honestly support: `meal_dining` and
+`meal_cafe`. Grocery and beverage leaves require other data sources.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import csv
 import json
 import os
 import random
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -111,7 +112,8 @@ def infer_cashlog_category(name: str, overrides: dict) -> str:
     for rule in overrides.get("leaf_keyword_rules", []):
         leaf_id = rule["leaf_id"]
         for keyword in rule.get("keywords", []):
-            if keyword in lowered:
+            pattern = rf"(?<![a-z0-9]){re.escape(str(keyword).lower())}(?![a-z0-9])"
+            if re.search(pattern, lowered):
                 return leaf_id
 
     # Backward compatible support for the old two-label mapping file.
@@ -310,26 +312,72 @@ def run_epoch(
     }
 
 
-def class_weights(samples: list[Sample], num_classes: int) -> torch.Tensor:
+def class_weights(
+    samples: list[Sample],
+    num_classes: int,
+    power: float = 1.0,
+) -> torch.Tensor:
     counts = [0 for _ in range(num_classes)]
     for sample in samples:
         counts[sample.label] += 1
     total = sum(counts)
-    return torch.tensor([total / max(1, count) for count in counts], dtype=torch.float32)
+    return torch.tensor(
+        [(total / max(1, count)) ** power for count in counts],
+        dtype=torch.float32,
+    )
 
 
 def loss_weights_for_training(
-    samples: list[Sample], num_classes: int, balanced_sampling: bool
+    samples: list[Sample],
+    num_classes: int,
+    balanced_sampling: bool,
+    power: float = 1.0,
 ) -> torch.Tensor | None:
     # A balanced sampler already corrects the class prior. Applying inverse-frequency
     # loss weights at the same time over-corrects minority classes and hurts validation.
-    return None if balanced_sampling else class_weights(samples, num_classes)
+    return (
+        None
+        if balanced_sampling
+        else class_weights(samples, num_classes, power=power)
+    )
 
 
 def balanced_sampler(samples: list[Sample], num_classes: int) -> WeightedRandomSampler:
     weights = class_weights(samples, num_classes)
     sample_weights = [float(weights[sample.label]) for sample in samples]
     return WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
+
+
+def build_optimizer(
+    model: nn.Module,
+    *,
+    lr: float,
+    head_lr: float | None,
+    weight_decay: float,
+) -> torch.optim.AdamW:
+    if head_lr is None or head_lr == lr:
+        return torch.optim.AdamW(
+            model.parameters(), lr=lr, weight_decay=weight_decay
+        )
+    classifier = model.get_classifier()
+    classifier_parameter_ids = {
+        id(parameter) for parameter in classifier.parameters()
+    }
+    backbone_parameters = [
+        parameter
+        for parameter in model.parameters()
+        if id(parameter) not in classifier_parameter_ids
+    ]
+    classifier_parameters = list(classifier.parameters())
+    if not classifier_parameters:
+        raise ValueError("model classifier has no trainable parameters")
+    return torch.optim.AdamW(
+        [
+            {"params": backbone_parameters, "lr": lr},
+            {"params": classifier_parameters, "lr": head_lr},
+        ],
+        weight_decay=weight_decay,
+    )
 
 
 def remap_samples(samples: list[Sample], index_remap: dict[int, int]) -> list[Sample]:
@@ -394,6 +442,11 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=3e-4)
+    parser.add_argument(
+        "--head-lr",
+        type=float,
+        help="Optional classifier-head learning rate; backbone continues to use --lr.",
+    )
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--label-smoothing", type=float, default=0.05)
     parser.add_argument("--image-size", type=int, default=224)
@@ -405,6 +458,12 @@ def main() -> None:
     parser.add_argument("--max-samples-per-uec-class", type=int)
     parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument("--no-balanced-sampler", action="store_true")
+    parser.add_argument(
+        "--class-weight-power",
+        type=float,
+        default=1.0,
+        help="Inverse-frequency exponent for weighted loss; 0 disables reweighting.",
+    )
     parser.add_argument("--trainable-leaf-ids", nargs="*", help="Cashlog leaf ids to train. Defaults to leaves with available samples.")
     parser.add_argument("--min-samples-per-leaf", type=int, default=2)
     parser.add_argument("--mlflow-tracking-uri", default=os.getenv("MLFLOW_TRACKING_URI"))
@@ -432,6 +491,8 @@ def main() -> None:
     parser.add_argument("--jsonl-log", type=Path)
     args = parser.parse_args()
 
+    if not 0.0 <= args.class_weight_power <= 1.0:
+        raise SystemExit("--class-weight-power must be between 0 and 1")
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -495,11 +556,19 @@ def main() -> None:
     model = build_model(resolved_arch, args.weights, len(trainable_categories), args.pretrained).to(device)
     balanced_sampling = sampler is not None
     raw_loss_weights = loss_weights_for_training(
-        train_samples, len(trainable_categories), balanced_sampling
+        train_samples,
+        len(trainable_categories),
+        balanced_sampling,
+        power=args.class_weight_power,
     )
     loss_weights = raw_loss_weights.to(device) if raw_loss_weights is not None else None
     criterion = nn.CrossEntropyLoss(weight=loss_weights, label_smoothing=args.label_smoothing)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = build_optimizer(
+        model,
+        lr=args.lr,
+        head_lr=args.head_lr,
+        weight_decay=args.weight_decay,
+    )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(args.epochs, 1))
     start_epoch = 1
     best_top1 = -1.0
@@ -579,20 +648,24 @@ def main() -> None:
 
     metrics_path = args.output_dir / "metrics.csv"
     progress_path = args.output_dir / "progress.json"
-    event_log = TrainingEventLog(
-        args.jsonl_log or args.output_dir / "training.jsonl"
-    )
+    event_log_path = args.jsonl_log or args.output_dir / "training.jsonl"
+    if args.resume is None:
+        event_log_path.write_text("", encoding="utf-8")
+    event_log = TrainingEventLog(event_log_path)
     event_log.emit(
         "training_started",
         device=str(device),
         mps_available=torch.backends.mps.is_available(),
         architecture=resolved_arch,
         target_top1=args.target_top1,
+        backbone_lr=args.lr,
+        head_lr=args.head_lr if args.head_lr is not None else args.lr,
         train_samples=len(train_samples),
         validation_samples=len(val_samples),
         class_counts=class_counts_by_id,
         balanced_sampler=balanced_sampling,
         class_weighted_loss=loss_weights is not None,
+        class_weight_power=args.class_weight_power,
     )
     atomic_write_json(
         progress_path,
@@ -618,12 +691,14 @@ def main() -> None:
                 "epochs": args.epochs,
                 "batch_size": args.batch_size,
                 "lr": args.lr,
+                "head_lr": args.head_lr if args.head_lr is not None else args.lr,
                 "weight_decay": args.weight_decay,
                 "label_smoothing": args.label_smoothing,
                 "image_size": args.image_size,
                 "val_ratio": args.val_ratio,
                 "balanced_sampler": not args.no_balanced_sampler,
                 "class_weighted_loss": loss_weights is not None,
+                "class_weight_power": args.class_weight_power,
                 "trainable_leaf_ids": ",".join(category["id"] for category in trainable_categories),
                 "device": str(device),
                 "target_top1": args.target_top1,

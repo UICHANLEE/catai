@@ -200,7 +200,11 @@ def fetch_source(raw_dir: Path, offline_csv: Path | None) -> tuple[Path, dict[st
     return destination, metadata
 
 
-def source_rows(csv_path: Path, metadata: dict[str, Any], max_per_leaf: int) -> list[dict[str, Any]]:
+def source_rows(
+    csv_path: Path,
+    metadata: dict[str, Any],
+    max_per_leaf: int | None,
+) -> list[dict[str, Any]]:
     counts: Counter[str] = Counter()
     output: list[dict[str, Any]] = []
     with csv_path.open(encoding="utf-8", newline="") as handle:
@@ -211,7 +215,9 @@ def source_rows(csv_path: Path, metadata: dict[str, Any], max_per_leaf: int) -> 
             text = str(row["description"]).strip()
             source_category = str(row["category"]).strip()
             leaf_id = map_transaction(text, source_category)
-            if not leaf_id or counts[leaf_id] >= max_per_leaf:
+            if not leaf_id or (
+                max_per_leaf is not None and counts[leaf_id] >= max_per_leaf
+            ):
                 continue
             record_hash = hashlib.sha256(
                 f"{index}\0{text}\0{source_category}".encode()
@@ -323,7 +329,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--raw-dir", type=Path, default=DEFAULT_RAW_DIR)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--offline-csv", type=Path)
-    parser.add_argument("--max-source-per-leaf", type=int, default=1200)
+    parser.add_argument(
+        "--max-source-per-leaf",
+        type=int,
+        default=0,
+        help="Maximum mapped source rows per leaf. Use 0 to keep every mapped row.",
+    )
     parser.add_argument("--synthetic-per-leaf", type=int, default=240)
     parser.add_argument("--seed", type=int, default=250716)
     return parser.parse_args()
@@ -331,6 +342,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.max_source_per_leaf < 0:
+        raise SystemExit("--max-source-per-leaf must be zero or greater")
     if args.synthetic_per_leaf < 8:
         raise SystemExit("--synthetic-per-leaf must be at least 8 to cover every split")
     categories = load_json(args.categories)
@@ -342,7 +355,8 @@ def main() -> None:
     if set(leaf_ids) != set(ocr_lexicon["leaves"]):
         raise SystemExit("OCR lexicon must contain the same 33 leaves")
     csv_path, source_metadata = fetch_source(args.raw_dir.resolve(), args.offline_csv)
-    rows = source_rows(csv_path, source_metadata, args.max_source_per_leaf)
+    max_source_per_leaf = args.max_source_per_leaf or None
+    rows = source_rows(csv_path, source_metadata, max_source_per_leaf)
     rows.extend(
         synthetic_rows(categories, semantics, ocr_lexicon, args.synthetic_per_leaf, args.seed)
     )

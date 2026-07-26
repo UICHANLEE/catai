@@ -71,6 +71,10 @@ JOBS = {
         "--log-interval",
         "50",
     ],
+    "cashlog_meal2_all_mps_target95": [
+        "bash",
+        "scripts/train_cashlog33_all_data_mps.sh",
+    ],
     "cashlog_leaf_uecfood_auto": [
         ".venv/bin/python",
         "scripts/train_cashlog_category_from_uecfood.py",

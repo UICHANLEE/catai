@@ -1,6 +1,6 @@
 # CashLog 33-Leaf Data Card
 
-Version: 2026-07-17
+Version: 2026-07-27
 Taxonomy: 33 leaves, `configs/cashlog/categories.json`
 
 ## Intended Use
@@ -14,14 +14,26 @@ other sensitive attributes.
 
 | Dataset | Acquisition | Rows/images | Coverage | License and status |
 |---|---|---:|---:|---|
-| US bank transaction categories v2 | Revision-pinned Hugging Face file API | 18,669 used rows | Weak mapping across available leaves | MIT; entirely synthetic source data |
+| US bank transaction categories v2 | Revision-pinned Hugging Face file API | 60,000 mapped rows | Weak mapping across available leaves | MIT; entirely synthetic source data |
 | CashLog text templates | Deterministic local generator | 15,840 rows | All 33 leaves | Project-generated; integration/training aid |
 | Open Images V7 validation | Google metadata files and image URLs | 411 images | 23 leaves | Annotations CC BY 4.0; selected images individually carry CC BY 2.0 metadata |
+| Openverse smoke collection | Openverse API | 61 images | 31 leaves | 55 CC BY, 4 CC0, 2 PDM; weak query labels, train-only |
+| UECFood256 | Local downloaded archive and project override map | 31,395 images | `meal_dining`, `meal_cafe` | Research dataset; bundled README states no redistribution license, so data/model redistribution is not assumed |
+| CashLog actual | Consented import and manual labeling | 2 images | `meal_dining` | Private, human-approved, train-only |
 | CashLog receipt fixtures | Deterministic local renderer | 99 images | 3 per each of 33 leaves | Project-generated; E2E test only |
 
-The text build currently contains 34,509 rows: 26,794 train, 3,839 validation, and
-3,876 test. Counts and provenance are regenerated in
-`data/processed/cashlog33/text/v2/quality_report.json`.
+The all-data text build contains 75,840 rows: 59,685 train, 8,067 validation, and
+8,088 test. It keeps all 60,000 source rows that map to an expense leaf and all
+15,840 generated rows. The source CSV has 68,000 rows; the remaining 8,000
+income/transfer rows have no valid target in the expense-only 33-leaf taxonomy.
+Counts and provenance are regenerated in
+`data/processed/cashlog33/text/all_v1/quality_report.json`.
+
+The train-capable image inventory is 31,869 images: 31,395 UECFood images,
+411 Open Images images, 61 Openverse images, and 2 actual images. These are not
+flattened into one misleading task. UECFood trains a prepared-food specialist;
+the other 474 images train the SigLIP2 33-leaf visual head. The specialist only
+redistributes probability already assigned to meal leaves.
 
 The Open Images collector dropped 4,058 images whose source labels mapped to multiple
 CashLog leaves and recorded zero download failures. Ten leaves that cannot be
@@ -39,9 +51,10 @@ leaves, unclassified, and other.
 - A collector failure must leave a summary rather than changing an existing approved
   manifest in place.
 
-Openverse was tested as an API source but anonymous collection encountered `401` and
-`429` responses; its smoke output is not used for the selected model. PD12M dataset
-index access returned server/index errors and was also excluded.
+Openverse full expansion encountered anonymous `401` and `429` responses. All 61
+successfully downloaded and licensed smoke rows are retained as explicit weak
+train-only labels; they never enter validation or test. PD12M dataset index access
+returned server/index errors and supplied no local data to train.
 
 ## Split and Leakage Policy
 
@@ -90,7 +103,10 @@ and does not write directly to Supabase. See `ml_docs/CASHLOG33_FEEDBACK_LOOP.md
 
 - No frozen real-photo holdout currently exists, so production accuracy is unknown.
 - Synthetic text accuracy is inflated by templates and broad label mappings.
-- Open Images covers only 23 leaves and contains objects, not Korean expense context.
+- The general visual head has 31 train leaves after weak Openverse additions, but its
+  frozen proxy holdout still covers only 23 leaves.
+- UECFood contains prepared food but no trustworthy grocery or beverage expense
+  labels. All images train the dining/cafe specialist.
 - Visual support is sparse for `health_gym` and `gift_event` in the current proxy.
 - OCR performance depends on blur, glare, crop, typography, and receipt language.
 - Current confidence calibration fails the production ECE threshold on synthetic E2E.
