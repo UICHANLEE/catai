@@ -346,3 +346,25 @@ still must be replaced by a named, policy-controlled tunnel before production.
 - Actual samples remain ineligible for training until a human confirms or
   corrects their 33-leaf label. Approved actual rows are locked to `train`;
   deployment accuracy still requires a separate untouched holdout.
+
+## 2026-07-26 - Actual-label incremental retraining
+
+- Exported 2 human-approved actual rows, both `meal_dining`, as train-locked
+  inputs. No actual image, OCR text, identifier, or prediction file was committed.
+- Reused the frozen Open Images embedding cache and encoded 8 augmented actual
+  views with SigLIP2 on MPS in 7.50 seconds.
+- Trained candidate `cashlog33-hybrid-actual-v1-candidate`; MLflow experiment 3,
+  run `ea44469a8f67442cbc214e9ca380d8d7`.
+- The untouched 62-row validation and 82-row test metrics were exactly unchanged:
+  validation Top-1 75.81%, Top-3 96.77%, macro-F1 72.60%; test Top-1 79.27%,
+  Top-3 93.90%, macro-F1 80.94%.
+- On the fixed 99-row synthetic E2E set, both serving and candidate models scored
+  Top-1 98.99%, Top-3 98.99%, and macro-F1 98.96%. Candidate p50/p95 latency was
+  243/292ms versus 238/262ms for the serving model in these single warm runs.
+- On the two training examples, fit improved from 1/2 to 2/2 and repaired the
+  observed `transit_car` to `meal_dining` error. This is not holdout evidence
+  because both examples were used for training.
+- Promotion decision: **keep `cashlog33-hybrid-v1.1-fast` serving**. The candidate
+  fixed the known training example but did not improve any untouched accuracy
+  metric, so `configs/cashlog/hybrid.serving.json` and its pinned hash were not
+  changed.

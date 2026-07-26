@@ -41,6 +41,31 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
+def validate_additional_train_rows(
+    rows: list[dict[str, Any]],
+    *,
+    base_rows: list[dict[str, Any]],
+    allowed_leaves: set[str],
+) -> list[dict[str, Any]]:
+    base_ids = {str(row["sample_id"]) for row in base_rows}
+    seen: set[str] = set()
+    for row in rows:
+        sample_id = str(row.get("sample_id") or "")
+        leaf_id = str(row.get("leaf_id") or "")
+        if not sample_id:
+            raise ValueError("additional training rows require sample_id")
+        if sample_id in base_ids or sample_id in seen:
+            raise ValueError(f"duplicate additional training sample_id: {sample_id}")
+        if str(row.get("split_lock") or "") != "train":
+            raise ValueError(f"additional training row is not train-locked: {sample_id}")
+        if leaf_id not in allowed_leaves:
+            raise ValueError(f"additional training row uses an unknown taxonomy leaf: {leaf_id}")
+        if not resolve_image_path(row).is_file():
+            raise ValueError(f"additional training image is missing: {sample_id}")
+        seen.add(sample_id)
+    return rows
+
+
 def stable_key(seed: int, value: str) -> str:
     return hashlib.sha256(f"{seed}:{value}".encode()).hexdigest()
 
@@ -216,6 +241,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--categories", type=Path, default=DEFAULT_CATEGORIES)
     parser.add_argument("--vision-model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--additional-train-manifest", type=Path, action="append", default=[])
+    parser.add_argument("--base-embedding-cache", type=Path)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
     parser.add_argument("--seed", type=int, default=250716)
@@ -244,6 +271,15 @@ def main() -> None:
     categories = json.loads(args.categories.read_text(encoding="utf-8"))
     category_order = [str(row["id"]) for row in categories]
     supported = [leaf_id for leaf_id in category_order if leaf_id in {str(row["leaf_id"]) for row in rows}]
+    additional_rows = validate_additional_train_rows(
+        [
+            row
+            for manifest in args.additional_train_manifest
+            for row in read_jsonl(manifest)
+        ],
+        base_rows=rows,
+        allowed_leaves=set(category_order),
+    )
     splits = stratified_split(rows, args.seed)
     split_counts = {
         split: dict(sorted(Counter(str(row["leaf_id"]) for row in split_rows).items()))
@@ -252,24 +288,84 @@ def main() -> None:
     if set(split_counts["train"]) != set(supported) or set(split_counts["test"]) != set(supported):
         raise RuntimeError("every supported visual leaf must have train and test examples")
 
-    device = choose_device(args.device)
-    vision_model = AutoModel.from_pretrained(args.vision_model, local_files_only=True).to(device).eval()
-    processor = AutoProcessor.from_pretrained(
-        args.vision_model, local_files_only=True, use_fast=True
-    )
     started = time.perf_counter()
-    train_embeddings, train_labels, train_ids = encode_rows(
-        vision_model, processor, splits["train"], True, args.batch_size, device, "train"
-    )
-    val_embeddings, val_labels, val_ids = encode_rows(
-        vision_model, processor, splits["val"], False, args.batch_size, device, "val"
-    )
-    test_embeddings, test_labels, test_ids = encode_rows(
-        vision_model, processor, splits["test"], False, args.batch_size, device, "test"
-    )
+    if args.base_embedding_cache:
+        with np.load(args.base_embedding_cache, allow_pickle=False) as cache:
+            required_cache_keys = {
+                "train",
+                "train_labels",
+                "val",
+                "val_labels",
+                "test",
+                "test_labels",
+            }
+            if set(cache.files) != required_cache_keys:
+                raise ValueError("base embedding cache does not match the expected contract")
+            train_embeddings = cache["train"]
+            train_labels = [str(value) for value in cache["train_labels"].tolist()]
+            val_embeddings = cache["val"]
+            val_labels = [str(value) for value in cache["val_labels"].tolist()]
+            test_embeddings = cache["test"]
+            test_labels = [str(value) for value in cache["test_labels"].tolist()]
+        expected_train = [
+            str(row["leaf_id"])
+            for row in splits["train"]
+            for _ in range(4)
+        ]
+        expected_val = [str(row["leaf_id"]) for row in splits["val"]]
+        expected_test = [str(row["leaf_id"]) for row in splits["test"]]
+        if (
+            train_labels != expected_train
+            or val_labels != expected_val
+            or test_labels != expected_test
+        ):
+            raise ValueError("base embedding cache labels do not match the frozen split")
+    else:
+        device = choose_device(args.device)
+        vision_model = (
+            AutoModel.from_pretrained(args.vision_model, local_files_only=True)
+            .to(device)
+            .eval()
+        )
+        processor = AutoProcessor.from_pretrained(
+            args.vision_model, local_files_only=True, use_fast=True
+        )
+        train_embeddings, train_labels, _ = encode_rows(
+            vision_model, processor, splits["train"], True, args.batch_size, device, "train"
+        )
+        val_embeddings, val_labels, _ = encode_rows(
+            vision_model, processor, splits["val"], False, args.batch_size, device, "val"
+        )
+        test_embeddings, test_labels, _ = encode_rows(
+            vision_model, processor, splits["test"], False, args.batch_size, device, "test"
+        )
+        del vision_model, processor
+        gc.collect()
+
+    if additional_rows:
+        device = choose_device(args.device)
+        vision_model = (
+            AutoModel.from_pretrained(args.vision_model, local_files_only=True)
+            .to(device)
+            .eval()
+        )
+        processor = AutoProcessor.from_pretrained(
+            args.vision_model, local_files_only=True, use_fast=True
+        )
+        additional_embeddings, additional_labels, _ = encode_rows(
+            vision_model,
+            processor,
+            additional_rows,
+            True,
+            args.batch_size,
+            device,
+            "additional-train",
+        )
+        train_embeddings = np.concatenate([train_embeddings, additional_embeddings], axis=0)
+        train_labels.extend(additional_labels)
+        del vision_model, processor
+        gc.collect()
     embedding_seconds = time.perf_counter() - started
-    del vision_model, processor
-    gc.collect()
     np.savez_compressed(
         args.output_dir / "embedding_cache.npz",
         train=train_embeddings,
@@ -299,6 +395,10 @@ def main() -> None:
     candidates.sort(key=lambda item: (-item[0], -item[1]))
     selected_head = candidates[0][2]
     selected_c = float(selected_head.C)
+    trained_class_ids = {str(value) for value in selected_head.classes_}
+    trained_leaves = [
+        leaf_id for leaf_id in category_order if leaf_id in trained_class_ids
+    ]
     validation_metrics = candidates[0][3]
     test_metrics, test_matrix, per_class = evaluate_model(
         selected_head, test_embeddings, test_labels, supported
@@ -313,7 +413,7 @@ def main() -> None:
         "schema_version": 1,
         "model": selected_head,
         "classes": [str(value) for value in selected_head.classes_],
-        "supported_leaves": supported,
+        "supported_leaves": trained_leaves,
         "vision_model_sha256": model_sha256,
         "selected_c": selected_c,
         "created_at": utc_now(),
@@ -325,9 +425,13 @@ def main() -> None:
         "generated_at": utc_now(),
         "dataset": "Open Images V7 validation source-label proxy",
         "supported_leaf_count": len(supported),
+        "trained_leaf_count": len(trained_leaves),
         "taxonomy_leaf_count": len(category_order),
         "split_counts": split_counts,
         "train_augmented_samples": len(train_labels),
+        "additional_train_rows": len(additional_rows),
+        "additional_train_augmented_samples": len(additional_rows) * 4,
+        "base_embedding_cache": str(args.base_embedding_cache) if args.base_embedding_cache else None,
         "embedding_seconds": embedding_seconds,
         "selected_c": selected_c,
         "validation": validation_metrics,
@@ -367,6 +471,20 @@ def main() -> None:
                     )
                     + "\n"
                 )
+        for row in additional_rows:
+            handle.write(
+                json.dumps(
+                    {
+                        "sample_id": row["sample_id"],
+                        "leaf_id": row["leaf_id"],
+                        "split": "train",
+                        "source": "additional_train_manifest",
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
 
     if not args.disable_mlflow and args.mlflow_tracking_uri:
         import mlflow
@@ -378,8 +496,10 @@ def main() -> None:
                 {
                     "component": "siglip2_linear_head",
                     "supported_leaf_count": len(supported),
+                    "trained_leaf_count": len(trained_leaves),
                     "selected_c": selected_c,
                     "train_augmented_samples": len(train_labels),
+                    "additional_train_rows": len(additional_rows),
                     "selected_for_hybrid": selected,
                 }
             )

@@ -11,12 +11,44 @@ from fastapi import HTTPException
 
 from catai.cashlog_api import validate_image, verify_internal_api_key
 from catai.cashlog_hybrid_classifier import CashlogHybridClassifier
+from scripts.train_cashlog33_vision_head import validate_additional_train_rows
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class Cashlog33ContractTests(unittest.TestCase):
+    def test_additional_vision_rows_must_be_train_locked(self) -> None:
+        base = [{"sample_id": "base:1"}]
+        row = {
+            "sample_id": "actual:1",
+            "leaf_id": "meal_dining",
+            "split_lock": "test",
+            "relative_path": __file__,
+        }
+        with self.assertRaisesRegex(ValueError, "not train-locked"):
+            validate_additional_train_rows(
+                [row],
+                base_rows=base,
+                allowed_leaves={"meal_dining"},
+            )
+
+    def test_additional_vision_rows_accept_any_known_taxonomy_leaf(self) -> None:
+        row = {
+            "sample_id": "actual:1",
+            "leaf_id": "housing_fee",
+            "split_lock": "train",
+            "relative_path": __file__,
+        }
+        self.assertEqual(
+            [row],
+            validate_additional_train_rows(
+                [row],
+                base_rows=[],
+                allowed_leaves={"housing_fee"},
+            ),
+        )
+
     def setUp(self) -> None:
         self.categories = json.loads(
             (ROOT / "configs/cashlog/categories.json").read_text(encoding="utf-8")

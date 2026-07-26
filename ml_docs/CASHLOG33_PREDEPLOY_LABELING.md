@@ -77,8 +77,9 @@ Start the separate actual-only labeler:
 Open `http://127.0.0.1:8012`. This preset reads only
 `data/raw/cashlog33/actual/manifest.jsonl`, starts on the unreviewed queue, and
 writes decisions only to `data/processed/cashlog33/actual_review/v1`. The proxy
-queue on port `8011` and all of its decisions remain untouched. Restart the
-actual labeler after a daily import to load newly arrived samples.
+queue on port `8011` and all of its decisions remain untouched. Restarting the
+actual labeler is not required after an import; the server checks the manifest for
+appended rows and the page refreshes the queue automatically.
 
 To inspect another scored manifest:
 
@@ -156,3 +157,27 @@ Actual rows remain `pending` until the operator confirms, corrects, or rejects
 them in the actual-only tool. Only human-approved rows appear in its
 `training_manifest.jsonl`; they are locked to `train` and cannot be used to
 claim holdout accuracy.
+
+## Incremental vision-head retraining
+
+The vision-head trainer accepts one or more human-approved, train-locked
+manifests. All 33 taxonomy leaves are eligible, even when a leaf was absent from
+the original Open Images visual proxy. Reusing the frozen base embedding cache
+keeps the validation/test split unchanged and sends only the new images through
+SigLIP2:
+
+```bash
+.venv/bin/python scripts/train_cashlog33_vision_head.py \
+  --additional-train-manifest \
+    data/processed/cashlog33/actual_review/v1/training_manifest.jsonl \
+  --base-embedding-cache \
+    checkpoints/cashlog33/vision_head_v1/embedding_cache.npz \
+  --output-dir checkpoints/cashlog33/vision_head_actual_v1 \
+  --device mps
+```
+
+Known reviewed training examples may be used as regression checks, but their
+accuracy is training fit rather than deployment evidence. A candidate replaces
+the serving head only when untouched proxy/real holdout metrics improve without
+E2E regression. The serving config and its pinned artifact hash stay unchanged
+when that gate is not met.
