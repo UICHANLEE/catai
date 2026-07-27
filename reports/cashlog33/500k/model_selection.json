@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_at": "2026-07-27T05:58:00+00:00",
-  "status": "operator_approved_serving",
+  "status": "rolled_back_from_serving",
   "selected_candidate": {
     "name": "cashlog33-text-500k-v2-alpha1e5-candidate",
     "artifact": "checkpoints/cashlog33/text_500k_v2_alpha1e5/text_model.joblib",
@@ -44,11 +44,17 @@
     "mlflow_run": "439e0f654dac465a9c8f2d4befc7c7f4"
   },
   "promotion": {
-    "approved": true,
-    "reason": "Explicit operator approval after v1 and v2 regression checks.",
-    "serving_config_changed": true,
-    "serving_model_version": "cashlog33-500k-mps-v2",
+    "approved": false,
+    "reason": "Rolled back after poor operator-observed real usage.",
+    "serving_config_changed": false,
+    "serving_model_version": "cashlog33-all-data-mps-v1",
     "safety_note": "allow_auto_confirm remains false until a real-photo holdout passes."
+  },
+  "rollback": {
+    "candidate_model_version": "cashlog33-500k-mps-v2",
+    "restored_model_version": "cashlog33-all-data-mps-v1",
+    "trigger": "operator_real_usage_quality_rejection",
+    "candidate_is_evaluation_only": true
   },
   "scope_warning": "Synthetic and proxy metrics do not establish production accuracy."
 }

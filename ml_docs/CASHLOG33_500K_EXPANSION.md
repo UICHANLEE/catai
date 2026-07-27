@@ -76,8 +76,8 @@ Airflow에서는 `cashlog33_500k_training_pipeline`, MLflow에서는
 
 ## 선정 상태
 
-후보 모델과 checksum-pinned config 생성 후 사용자의 명시적 승인으로 텍스트
-컴포넌트를 운영 serving config에 승격했다. 실제 CashLog 사용자 사진의 동결
-holdout은 아직 없으므로 `allow_auto_confirm=false`를 유지한다. 다음 신뢰도
-승격 조건은 33개 leaf 실제 사진 holdout에서 기존 모델 대비 Top-1,
-Macro-F1, 최소 leaf recall 회귀가 없는 것이다.
+후보 모델과 checksum-pinned config를 생성해 일시적으로 승격했지만, 실제 사용
+품질이 나쁘다는 운영자 판정에 따라 즉시 롤백했다. 현재 운영 모델은
+`cashlog33-all-data-mps-v1`이며 50만 장 모델은 평가 전용이다. 재승격 조건은
+33개 leaf 실제 사진 동결 holdout에서 기존 모델 대비 Top-1, Macro-F1,
+최소 leaf recall 회귀가 없고 운영자 육안 검수를 통과하는 것이다.

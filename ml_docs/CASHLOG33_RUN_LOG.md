@@ -881,3 +881,28 @@ OCR에서 `학원` lexicon이 명확히 검출됐으므로 with-lexicon fusion�
 - confidence: `0.2713`
 - matched lexicon: `학원`
 - `need_user_check=true`
+
+## 21. 운영자 품질 판정에 따른 즉시 롤백
+
+실제 사용 결과가 나쁘다는 운영자 판정에 따라 50만 장 후보를 서빙에서 즉시
+제거했다. 학습 artifact와 평가 보고서는 원인 분석을 위해 보존하지만 재승격은
+금지한다.
+
+- 제거: `cashlog33-500k-mps-v2`
+- 복원: `cashlog33-all-data-mps-v1`
+- 복원 text artifact:
+  `checkpoints/cashlog33/text_all_data_v1/text_model.joblib`
+- 복원 SHA-256:
+  `fa85c45c9d9464116c8fe16ff02d6656960a948acf5d752647244b5639b13fba`
+- 복원 with-lexicon fusion: vision `0.25`, text `0.60`, lexicon `0.15`
+- `allow_auto_confirm=false` 유지
+
+LaunchAgent 재시작 후 검증:
+
+- `/health`: `status=ok`, `model_loaded=true`, `model_device=mps`
+- model version: `cashlog33-all-data-mps-v1`
+- `edu_class/fixture-00.jpg` 실제 API 추천: `edu_class`
+- `need_user_check=true`
+
+50만 장 후보는 실제 사진 동결 holdout과 운영자 검수를 통과하기 전까지 평가
+전용으로 유지한다.

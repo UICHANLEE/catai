@@ -38,10 +38,10 @@ tail -f logs/model-api.jsonl
 tail -f logs/model-api.error.log
 ```
 
-The active native serving version is `cashlog33-500k-mps-v2`. It keeps the existing
-visual and meal-specialist components and serves the checksum-pinned 500k OCR-text
-model. Operator approval does not enable automatic confirmation; user review remains
-required until the real-photo holdout gate passes.
+The active native serving version is `cashlog33-all-data-mps-v1`. The 500k OCR-text
+candidate was rolled back after poor operator-observed real usage and must not be
+promoted again without a frozen real-photo holdout and explicit operator review.
+Automatic confirmation remains disabled.
 
 The owner-only `.runtime/cashlog-api.env` supplies the internal key and is ignored
 by Git. `model-api.jsonl` contains rotating inference/request JSON events; library

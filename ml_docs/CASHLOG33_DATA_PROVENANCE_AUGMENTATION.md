@@ -159,10 +159,11 @@ sample ID에서 파생한 seed로 결정되어 재현 가능하다.
 `0.9081 → 0.9562`로 개선됐다. 실제 RapidOCR 출력 99장에서도 v2
 `0.9293 → 0.9596`, v1 `0.9091 → 0.9192`로 개선됐다.
 
-의미 단어가 검출된 경우의 최종 서빙 fusion은 vision `0.25`, text
-`0.50`, lexicon `0.25`이다. 99장 hybrid E2E 재평가 결과 Top-1
-`0.9899`, Macro-F1 `0.9896`, false auto-confirm `0`을 기록했다.
-MLflow run은 `439e0f654dac465a9c8f2d4befc7c7f4`이다.
+후보 평가 당시 의미 단어가 검출된 fusion은 vision `0.25`, text `0.50`,
+lexicon `0.25`였다. 99장 hybrid E2E 재평가 결과 Top-1 `0.9899`,
+Macro-F1 `0.9896`, false auto-confirm `0`을 기록했다. MLflow run은
+`439e0f654dac465a9c8f2d4befc7c7f4`이다. 그러나 실제 사용 품질이 나쁘다는
+운영자 판정으로 이 후보는 서빙에서 롤백됐으며 현재는 평가 전용이다.
 
 ## 9. 한계
 

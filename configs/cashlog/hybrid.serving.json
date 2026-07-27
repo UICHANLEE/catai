@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "model_version": "cashlog33-500k-mps-v2",
+  "model_version": "cashlog33-all-data-mps-v1",
   "taxonomy_version": "13.33.1",
   "categories": "categories.json",
   "semantics": "leaf_semantics.json",
@@ -10,8 +10,8 @@
   "vision_head": "../../checkpoints/cashlog33/vision_head_all_data_v1/vision_head.joblib",
   "vision_head_sha256": "47ec06ff8eda10f3b3535386a3bdac609909d94a58b0c1313b47f52d29a64055",
   "vision_blend": {"zero_shot": 0.30, "linear_head": 0.70},
-  "text_model": "../../checkpoints/cashlog33/text_500k_v2_alpha1e5/text_model.joblib",
-  "text_model_sha256": "6220594bf65cb8b1b39d45862550be56722551797634b7c66a9568d0f6f3474a",
+  "text_model": "../../checkpoints/cashlog33/text_all_data_v1/text_model.joblib",
+  "text_model_sha256": "fa85c45c9d9464116c8fe16ff02d6656960a948acf5d752647244b5639b13fba",
   "meal_specialist": {
     "enabled": true,
     "checkpoint": "../../checkpoints/cashlog_meal2_mps_target95/best.pt",
@@ -39,7 +39,7 @@
     "ocr_use_coreml": false
   },
   "fusion": {
-    "with_lexicon": {"vision": 0.25, "text": 0.50, "lexicon": 0.25},
+    "with_lexicon": {"vision": 0.25, "text": 0.60, "lexicon": 0.15},
     "without_lexicon": {"vision": 0.85, "text": 0.15, "lexicon": 0.0},
     "agreement_bonus": 0.10
   },
