@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "generated_at": "2026-07-27T05:58:00+00:00",
-  "status": "candidate_selected_promotion_blocked",
+  "status": "operator_approved_serving",
   "selected_candidate": {
     "name": "cashlog33-text-500k-v2-alpha1e5-candidate",
     "artifact": "checkpoints/cashlog33/text_500k_v2_alpha1e5/text_model.joblib",
@@ -33,10 +33,22 @@
       "candidate_top1": 0.9191919191919192
     }
   },
+  "serving_fusion": {
+    "with_lexicon": {
+      "vision": 0.25,
+      "text": 0.5,
+      "lexicon": 0.25
+    },
+    "hybrid_e2e_top1": 0.98989898989899,
+    "hybrid_e2e_macro_f1": 0.9896103896103896,
+    "mlflow_run": "439e0f654dac465a9c8f2d4befc7c7f4"
+  },
   "promotion": {
-    "approved": false,
-    "reason": "No frozen, manually labeled real CashLog photo holdout exists.",
-    "serving_config_changed": false
+    "approved": true,
+    "reason": "Explicit operator approval after v1 and v2 regression checks.",
+    "serving_config_changed": true,
+    "serving_model_version": "cashlog33-500k-mps-v2",
+    "safety_note": "allow_auto_confirm remains false until a real-photo holdout passes."
   },
   "scope_warning": "Synthetic and proxy metrics do not establish production accuracy."
 }

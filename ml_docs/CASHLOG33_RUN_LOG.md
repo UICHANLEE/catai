@@ -810,3 +810,74 @@ v1 RapidOCR 고정셋에서 회귀해 제외했다.
 
 최종 검증은 Python 테스트 57개와 subtest 2개가 통과했다. Python compile,
 shell 문법 검사, `git diff --check`, 후보 artifact SHA-256 대조도 통과했다.
+
+## 20. 50만 장 모델 서빙 승격
+
+사용자 승인에 따라 최종 `alpha=1e-5` 텍스트 후보를 실제 서빙 설정에
+승격했다.
+
+- 이전 model version: `cashlog33-all-data-mps-v1`
+- 신규 model version: `cashlog33-500k-mps-v2`
+- 신규 text artifact:
+  `checkpoints/cashlog33/text_500k_v2_alpha1e5/text_model.joblib`
+- SHA-256:
+  `6220594bf65cb8b1b39d45862550be56722551797634b7c66a9568d0f6f3474a`
+- 시각 헤드와 meal specialist는 변경하지 않음
+- `allow_auto_confirm=false` 유지
+
+상세 출처와 증강 명세는
+`ml_docs/CASHLOG33_DATA_PROVENANCE_AUGMENTATION.md`에 기록했다.
+
+macOS LaunchAgent를 재설치하고 MPS worker를 재시작했다.
+
+`/health` 결과:
+
+- `status=ok`
+- `model_loaded=true`
+- `model_device=mps`
+- `model_version=cashlog33-500k-mps-v2`
+- `model_load_ms=13260.42`
+- `model_warmup_ms=913.84`
+
+보호된 runtime key를 사용한 multipart fixture 추론:
+
+- HTTP 200
+- 추천 및 정답 fixture: `health_gym`
+- confidence: `0.7480`
+- 응답 model: `cashlog33-500k-mps-v2`
+- `need_user_check=true`
+
+초기 신규 text weight `0.60`, lexicon weight `0.15`에서는
+`edu_class` 한 건이 `misc_uncat`으로 밀려 E2E Top-1이 `0.9798`이었다.
+OCR에서 `학원` lexicon이 명확히 검출됐으므로 with-lexicon fusion을
+다음처럼 보정했다.
+
+- vision: `0.25`
+- text: `0.50`
+- lexicon: `0.25`
+
+99장 전체 재평가:
+
+- MLflow run: `439e0f654dac465a9c8f2d4befc7c7f4`
+- Top-1: `0.9899`
+- Top-3: `0.9899`
+- Macro-F1: `0.9896`
+- minimum recall: `0.6667`
+- `need_user_check_rate=1`
+- `false_auto_confirm_rate=0`
+
+이 값은 기존 서빙 정확도를 회복하면서 50만 장 텍스트 모델을 사용하는
+최종 설정이다. 실제 사용자 사진의 동결 holdout이 생기기 전까지
+`allow_auto_confirm=false`를 유지한다.
+
+최종 fusion 반영 후 LaunchAgent를 다시 시작했다.
+
+- `/health`: `status=ok`, `model_loaded=true`, `model_device=mps`
+- model version: `cashlog33-500k-mps-v2`
+- load: `12200.13ms`
+- warm-up: `931.64ms`
+- 회귀 확인 fixture: `edu_class/fixture-00.jpg`
+- 실제 API 추천: `edu_class`
+- confidence: `0.2713`
+- matched lexicon: `학원`
+- `need_user_check=true`

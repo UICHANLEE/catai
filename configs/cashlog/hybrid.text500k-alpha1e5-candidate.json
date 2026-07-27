@@ -44,8 +44,8 @@
   "fusion": {
     "with_lexicon": {
       "vision": 0.25,
-      "text": 0.6,
-      "lexicon": 0.15
+      "text": 0.5,
+      "lexicon": 0.25
     },
     "without_lexicon": {
       "vision": 0.85,

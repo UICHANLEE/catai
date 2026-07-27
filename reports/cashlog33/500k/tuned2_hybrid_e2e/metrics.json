@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-27T12:40:39.480229+00:00",
+  "samples": 99,
+  "leaf_count": 33,
+  "minimum_per_leaf": 3,
+  "top1_accuracy": 0.98989898989899,
+  "top3_accuracy": 0.98989898989899,
+  "macro_f1": 0.9896103896103896,
+  "minimum_leaf_recall": 0.6666666666666666,
+  "ece_10_bin": 0.27185509449958734,
+  "need_user_check_rate": 1.0,
+  "correct_auto_confirm_rate": 0.0,
+  "false_auto_confirm_rate": 0.0,
+  "latency_p50_seconds": 0.3085359577089548,
+  "latency_p95_seconds": 0.543172738002613,
+  "dataset_scope": "synthetic_integration",
+  "device": "mps",
+  "target_top1": 0.95,
+  "target_met": true,
+  "stage_latency": {
+    "decode": {
+      "p50_ms": 3.470832947641611,
+      "p95_ms": 5.24886227212846
+    },
+    "fusion": {
+      "p50_ms": 10.550000239163637,
+      "p95_ms": 25.57752160355448
+    },
+    "inference_total": {
+      "p50_ms": 308.4941250272095,
+      "p95_ms": 541.5630666539072
+    },
+    "ocr": {
+      "p50_ms": 291.8904582038522,
+      "p95_ms": 460.47149593941845
+    },
+    "ocr_classification": {
+      "p50_ms": 13.265646062791348,
+      "p95_ms": 27.966103865765035
+    },
+    "ocr_detection": {
+      "p50_ms": 149.27143789827824,
+      "p95_ms": 245.52648945245892
+    },
+    "ocr_recognition": {
+      "p50_ms": 117.40206275135279,
+      "p95_ms": 206.28932304680347
+    },
+    "parallel_vision_ocr": {
+      "p50_ms": 292.70037543028593,
+      "p95_ms": 503.1254538800565
+    },
+    "quality": {
+      "p50_ms": 2.112208865582943,
+      "p95_ms": 4.1048913728445715
+    },
+    "vision": {
+      "p50_ms": 82.94350001960993,
+      "p95_ms": 173.03807488642627
+    }
+  },
+  "safe_fallback_rate": 0.04040404040404041,
+  "scope_warning": "Synthetic rendered receipts validate I/O and 33-leaf routing only."
+}

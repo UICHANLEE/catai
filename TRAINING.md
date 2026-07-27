@@ -119,8 +119,12 @@ and 3,300 test pages. Combining every previous text row produces 561,285 train,
 The selected `alpha=1e-5` text candidate improved the v2-only noisy holdout Top-1
 from `0.9200` to `0.9552` and Macro-F1 from `0.9081` to `0.9562`. On actual
 RapidOCR output it improved v2 Top-1 from `0.9293` to `0.9596` and v1 from
-`0.9091` to `0.9192`. The candidate is not automatically served because no frozen
-real-photo holdout exists. See `ml_docs/CASHLOG33_500K_EXPANSION.md`.
+`0.9091` to `0.9192`. It was promoted to serving only after explicit operator
+approval; `allow_auto_confirm=false` remains because no frozen real-photo holdout
+exists. See `ml_docs/CASHLOG33_500K_EXPANSION.md`.
+
+The complete source, licensing, augmentation probability, leakage, and I/O contract
+is documented in `ml_docs/CASHLOG33_DATA_PROVENANCE_AUGMENTATION.md`.
 
 ## Pre-deployment error review
 
