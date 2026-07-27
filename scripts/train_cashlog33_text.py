@@ -64,7 +64,13 @@ def update_progress(path: Path, stage: str, status: str, **details: Any) -> None
     print(json.dumps(payload, ensure_ascii=False), flush=True)
 
 
-def build_pipeline(seed: int, max_word_features: int, max_char_features: int) -> Pipeline:
+def build_pipeline(
+    seed: int,
+    max_word_features: int,
+    max_char_features: int,
+    alpha: float,
+    max_iter: int,
+) -> Pipeline:
     features = FeatureUnion(
         [
             (
@@ -94,8 +100,8 @@ def build_pipeline(seed: int, max_word_features: int, max_char_features: int) ->
     classifier = SGDClassifier(
         loss="log_loss",
         penalty="l2",
-        alpha=1e-5,
-        max_iter=150,
+        alpha=alpha,
+        max_iter=max_iter,
         tol=1e-5,
         class_weight="balanced",
         average=True,
@@ -245,6 +251,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=250716)
     parser.add_argument("--max-word-features", type=int, default=80000)
     parser.add_argument("--max-char-features", type=int, default=120000)
+    parser.add_argument("--alpha", type=float, default=1e-5)
+    parser.add_argument("--max-iter", type=int, default=150)
     parser.add_argument("--mlflow-tracking-uri", default=os.getenv("MLFLOW_TRACKING_URI"))
     parser.add_argument("--mlflow-experiment", default="cashlog33-hybrid")
     parser.add_argument("--mlflow-run-name")
@@ -280,7 +288,13 @@ def main() -> None:
             class_count=len(category_ids),
         )
         started = time.perf_counter()
-        model = build_pipeline(args.seed, args.max_word_features, args.max_char_features)
+        model = build_pipeline(
+            args.seed,
+            args.max_word_features,
+            args.max_char_features,
+            args.alpha,
+            args.max_iter,
+        )
         model.fit(
             [str(row["text"]) for row in by_split["train"]],
             [str(row["leaf_id"]) for row in by_split["train"]],
@@ -340,6 +354,8 @@ def main() -> None:
                 "seed": args.seed,
                 "max_word_features": args.max_word_features,
                 "max_char_features": args.max_char_features,
+                "alpha": args.alpha,
+                "max_iter": args.max_iter,
                 "class_counts_train": dict(
                     sorted(Counter(str(row["leaf_id"]) for row in by_split["train"]).items())
                 ),
@@ -354,6 +370,8 @@ def main() -> None:
                     "component": "ocr_text",
                     "taxonomy_leaf_count": len(category_ids),
                     "seed": args.seed,
+                    "alpha": args.alpha,
+                    "max_iter": args.max_iter,
                     "train_samples": len(by_split["train"]),
                     "val_samples": len(by_split["val"]),
                     "test_samples": len(by_split["test"]),

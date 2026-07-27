@@ -18,11 +18,12 @@ other sensitive attributes.
 | CashLog text templates | Deterministic local generator | 15,840 rows | All 33 leaves | Project-generated; integration/training aid |
 | Open Images V7 validation | Google metadata files and image URLs | 411 images | 23 leaves | Annotations CC BY 4.0; selected images individually carry CC BY 2.0 metadata |
 | Openverse smoke collection | Openverse API | 61 images | 31 leaves | 55 CC BY, 4 CC0, 2 PDM; weak query labels, train-only |
-| Product Opener APIs | Open Food/Beauty/Pet Food Facts APIs | 391 images downloaded; 389 accepted | Grocery, beverage, beauty, pet | CC BY-SA 3.0 image metadata; product-type weak labels, train-only |
+| Product Opener APIs | Open Food/Beauty/Pet Food Facts APIs | 972 rows downloaded across runs; 678 unique accepted | Grocery, beverage, beauty, pet | CC BY-SA 3.0 image metadata; product-type weak labels, train-only |
 | UECFood256 | Local downloaded archive and project override map | 31,395 images | `meal_dining`, `meal_cafe` | Research dataset; bundled README states no redistribution license, so data/model redistribution is not assumed |
 | CashLog actual | Consented import and manual labeling | 2 images | `meal_dining` | Private, human-approved, train-only |
 | CashLog receipt fixtures | Deterministic local renderer | 99 images | 3 per each of 33 leaves | Project-generated; E2E test only |
 | CashLog OCR/category synthetic v1 | Deterministic renderer from versioned text manifest | 112,200 full-page images | 3,400 per each of 33 leaves | Project-generated; synthetic training/validation only |
+| CashLog OCR/category synthetic v2 | Four layouts, three fonts, OCR corruption and capture degradation | 508,200 full-page images | 15,400 per each of 33 leaves | Project-generated; 501,600 train, proxy holdouts only |
 | CashLog OCR recognition v1 | Deterministic line crops from synthetic OCR boxes | 130,000 crops | Korean/English receipt lines | Project-generated; PaddleOCR recognition format |
 | CORD v2 | Pinned Hugging Face Hub API download | 1,000 receipts | OCR word boxes and receipt layout | CC BY 4.0; OCR-only, never CashLog category truth |
 
@@ -40,12 +41,14 @@ flattened into one misleading task. UECFood trains a prepared-food specialist;
 the other 474 images train the SigLIP2 33-leaf visual head. The specialist only
 redistributes probability already assigned to meal leaves.
 
-The OCR/category and product API expansion raises category-train-capable training
-inventory to 137,858 images by adding 105,600 balanced synthetic full-page training
-images and 389 accepted Product Opener images to the original 31,869 images.
-There are also 120,000 recognition training crops. CORD contributes 800 real photographed
+The v2 expansion contains 501,600 balanced full-page training images and 6,600
+held-out synthetic pages. Together with the retained v1 data, original visual
+sources, and 678 unique Product Opener images, the local category-train-capable
+image inventory is 639,747. The selected v2 text training manifest combines all
+59,685 previous training rows with all 501,600 v2 rows for 561,285 training rows.
+There are also 120,000 v1 recognition training crops. CORD contributes 800 real photographed
 receipts to OCR training. Including validation/test files, the expansion contains
-113,200 full-page images and 130,000 line crops. Synthetic images and CORD's
+621,400 synthetic full-page images and 130,000 line crops. Synthetic images and CORD's
 Indonesian domain labels do not enter the real-photo production holdout.
 
 The Open Images collector dropped 4,058 images whose source labels mapped to multiple
@@ -71,8 +74,10 @@ returned server/index errors and supplied no local data to train.
 
 The bounded Product Opener collector encountered transient HTTP `503` responses and
 completed with retries and a resumable manifest rather than bypassing rate limits.
-It downloaded 391 images; SHA-256 grouping rejected two rows because the same product
-image mapped to different CashLog leaves. The resulting 389 weak labels are train-only.
+Across two runs it downloaded 972 rows. Merge validation removed 292 repeated product
+IDs and two cross-leaf image conflicts, leaving 678 unique train-only weak labels.
+The second grocery search failed with a recorded `503`; the 98 previously accepted
+grocery images were preserved.
 Future bulk expansion uses the official Open Food Facts product export and AWS Open
 Data image/OCR bucket, as required by the provider for bulk acquisition.
 

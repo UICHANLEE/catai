@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-27T05:45:56.928028+00:00",
+  "model": "/Users/uichan/workspace/catai/checkpoints/cashlog33/text_500k_v2_alpha3e5/text_model.joblib",
+  "manifest": "/Users/uichan/workspace/catai/data/processed/cashlog33/ocr_text/v2_500k/manifest.jsonl",
+  "split": "test",
+  "samples": 3300,
+  "top1_accuracy": 0.9366666666666666,
+  "top3_accuracy": 0.956060606060606,
+  "macro_f1": 0.9384406458154337,
+  "log_loss": 0.4258638620376587,
+  "ece_10_bin": 0.13785887850504933,
+  "scope_warning": "Synthetic/noisy proxy split; not real CashLog accuracy."
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-27T05:58:00+00:00",
+  "status": "candidate_selected_promotion_blocked",
+  "selected_candidate": {
+    "name": "cashlog33-text-500k-v2-alpha1e5-candidate",
+    "artifact": "checkpoints/cashlog33/text_500k_v2_alpha1e5/text_model.joblib",
+    "artifact_sha256": "6220594bf65cb8b1b39d45862550be56722551797634b7c66a9568d0f6f3474a",
+    "config": "configs/cashlog/hybrid.text500k-alpha1e5-candidate.json",
+    "mlflow_training_run": "da3edd5709df4503b4923c20aa4e7610"
+  },
+  "dataset": {
+    "full_page_images": 508200,
+    "train_images": 501600,
+    "combined_train_text_rows": 561285,
+    "leaf_count": 33,
+    "source_group_leakage": 0,
+    "validation_status": "passed"
+  },
+  "fixed_holdout_comparison": {
+    "v2_noisy_text": {
+      "baseline_top1": 0.92,
+      "candidate_top1": 0.9551515151515152,
+      "baseline_macro_f1": 0.9081095787541291,
+      "candidate_macro_f1": 0.9561501922589831
+    },
+    "v2_rapidocr_99": {
+      "baseline_top1": 0.9292929292929293,
+      "candidate_top1": 0.9595959595959596
+    },
+    "v1_rapidocr_99": {
+      "baseline_top1": 0.9090909090909091,
+      "candidate_top1": 0.9191919191919192
+    }
+  },
+  "promotion": {
+    "approved": false,
+    "reason": "No frozen, manually labeled real CashLog photo holdout exists.",
+    "serving_config_changed": false
+  },
+  "scope_warning": "Synthetic and proxy metrics do not establish production accuracy."
+}

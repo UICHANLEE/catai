@@ -725,3 +725,88 @@ row를 SHA-256 기준으로 제외했다. 최종 389장은 학습 전용 약한 
 
 최종 검증에서 Python 테스트 53개와 subtest 2개가 통과했다. 새 Python 파일의
 bytecode compile, shell 문법 검사, `git diff --check`도 통과했다.
+
+## 19. 50만 장 과적합 완화 학습
+
+### 19.1 데이터 설계
+
+v1의 반복적인 종이 영수증 형태와 직접적인 `분류 메모 <정답>` 힌트를 제거했다.
+v2는 다음 변형을 결정적으로 생성한다.
+
+- receipt, statement, mobile, invoice 네 가지 layout
+- Apple SD Gothic Neo, Apple Gothic, Apple Myungjo 세 가지 한글 font
+- 원근, 밝기, 대비, blur, noise, downsample, motion blur
+- clean/light/medium OCR text corruption
+- source text group의 train/validation/test 고정
+
+생성 결과:
+
+- 전체 full-page: 508,200장, 12.01GiB
+- train: 501,600장, leaf별 정확히 15,200장
+- validation/test: 각각 3,300장
+- OCR line: 4,434,123개
+- 고유 이미지 SHA-256: 508,200개
+- 기존 데이터와 합친 text train: 561,285건
+- source group leakage: 0
+
+초기 전수 검증에서 원근 변환 반올림으로 이미지 밖에 걸친 OCR box가 3개
+발견됐다. 검증기를 50만 row 스트리밍 방식으로 바꾸고, 6개 샘플의 12개
+좌표를 이미지 경계로 보정했다. 재검증 결과 오류는 0이다.
+
+### 19.2 Product Opener 추가 수집
+
+- 신규 API 수집: 581장
+- 두 API run 합계: 972 row
+- 동일 product ID 제거: 292 row
+- 교차 leaf 동일 이미지 제거: 2 row
+- 최종 unique train-only 약한 라벨: 678장
+- 식재료 신규 검색: HTTP 503, 기존 98장 보존
+
+MPS 시각 후보는 고정 proxy test에서 Top-1 `0.8293 → 0.8415`,
+Macro-F1 `0.8067 → 0.8183`으로 올랐다. validation Top-1은 `0.7581`로
+기존 운영 시각 헤드의 `0.7742`보다 낮아 승격하지 않았다.
+MLflow run: `9e892db140df4b989824fdccd4c7f393`.
+
+### 19.3 텍스트 후보 비교
+
+신규 v2-only noisy test 3,300건에서 기존 모델:
+
+- Top-1: `0.9200`
+- Top-3: `0.9333`
+- Macro-F1: `0.9081`
+- ECE: `0.0554`
+
+561,285건 전체를 학습한 `alpha=3e-5` 후보는 Top-1 `0.9367`이었지만 기존
+v1 RapidOCR 고정셋에서 회귀해 제외했다.
+
+최종 선정한 `alpha=1e-5` 후보:
+
+- MLflow training run: `da3edd5709df4503b4923c20aa4e7610`
+- fit time: 175.38초
+- v2-only Top-1: `0.9552`
+- v2-only Top-3: `0.9655`
+- v2-only Macro-F1: `0.9562`
+- v2-only ECE: `0.0396`
+
+실제 RapidOCR 출력 99장 비교:
+
+| 고정셋 | 기존 | 최종 후보 | 변화 |
+|---|---:|---:|---:|
+| v2 multi-layout | 0.9293 | 0.9596 | +3.03%p |
+| v1 receipt | 0.9091 | 0.9192 | +1.01%p |
+
+후보 config는 `configs/cashlog/hybrid.text500k-alpha1e5-candidate.json`이다.
+합성 고정셋에서는 두 방향 모두 개선됐지만 실제 사용자 사진 holdout이 없으므로
+`configs/cashlog/hybrid.serving.json`은 변경하지 않았다.
+
+### 19.4 자동화와 모니터링
+
+- 로컬 dataset job: `cashlog_ocr_category_500k`
+- 로컬 training job: `cashlog_text_500k_alpha1e5`
+- Airflow DAG: `cashlog33_500k_training_pipeline`
+- MLflow experiment: `cashlog33-500k`
+- 전체 hash, box, class balance, source-group leakage 검증이 학습 선행 조건
+- 후보 DAG는 serving config를 수정하지 않는 promotion-gated 구조
+
+최종 검증은 Python 테스트 57개와 subtest 2개가 통과했다. Python compile,
+shell 문법 검사, `git diff --check`, 후보 artifact SHA-256 대조도 통과했다.

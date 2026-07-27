@@ -108,6 +108,21 @@ Use the Airflow Grid view for task state and per-task logs. MLflow experiment
 `cashlog33-all-data-mps`. A failed training task retries
 once after two minutes; the DAG has a four-hour timeout and only one active run.
 
+The separate manual DAG `cashlog33_500k_training_pipeline` handles the large
+anti-overfit build. It performs full data generation and validation, evaluates the
+current model on the fixed v2 holdout, trains the regularized candidate, and evaluates
+the candidate without modifying the serving config. It has an eight-hour timeout.
+
+Local equivalents:
+
+```bash
+.venv/bin/python scripts/launch_training.py cashlog_ocr_category_500k
+tail -f logs/cashlog_ocr_category_500k.log
+
+.venv/bin/python scripts/launch_training.py cashlog_text_500k_alpha1e5
+tail -f logs/cashlog_text_500k_alpha1e5.log
+```
+
 ## Jenkins Automation
 
 Create one Jenkins username/password credential:

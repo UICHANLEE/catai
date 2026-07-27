@@ -65,6 +65,33 @@ def index_unique(rows: list[dict[str, Any]], label: str) -> dict[str, dict[str, 
     return indexed
 
 
+def deduplicate_identical_sample_ids(
+    rows: list[dict[str, Any]], label: str
+) -> tuple[list[dict[str, Any]], int]:
+    indexed: dict[str, dict[str, Any]] = {}
+    duplicates = 0
+    for row in rows:
+        sample_id = str(row.get("sample_id") or "")
+        if not sample_id:
+            raise ValueError(f"{label} row is missing sample_id")
+        existing = indexed.get(sample_id)
+        if existing is None:
+            indexed[sample_id] = row
+            continue
+        identity = (
+            str(row.get("leaf_id") or ""),
+            str(row.get("sha256") or "").lower(),
+        )
+        existing_identity = (
+            str(existing.get("leaf_id") or ""),
+            str(existing.get("sha256") or "").lower(),
+        )
+        if identity != existing_identity:
+            raise ValueError(f"conflicting duplicate {label} sample_id: {sample_id}")
+        duplicates += 1
+    return list(indexed.values()), duplicates
+
+
 def validate_image_hash(row: dict[str, Any]) -> None:
     sample_id = str(row["sample_id"])
     expected = str(row.get("sha256") or "").lower()
@@ -155,6 +182,9 @@ def build_incremental_dataset(
         for manifest in weak_additional_manifests
         for row in read_jsonl(manifest)
     ]
+    weak_rows, duplicate_weak_sample_ids = deduplicate_identical_sample_ids(
+        weak_rows, "weak additional"
+    )
     weak_by_id = index_unique(weak_rows, "weak additional")
     overlap = sorted((set(base_by_id) | set(additional_by_id)) & set(weak_by_id))
     if overlap:
@@ -263,6 +293,7 @@ def build_incremental_dataset(
         "base_rows": len(base_rows),
         "additional_train_rows": len(reviewed_train),
         "weak_additional_train_rows": len(weak_train),
+        "weak_duplicate_sample_ids_excluded": duplicate_weak_sample_ids,
         "weak_ambiguous_rows_excluded": len(ambiguous_weak_ids),
         "weak_duplicate_rows_excluded": len(duplicate_weak_ids),
         "merged_rows": len(merged_rows),

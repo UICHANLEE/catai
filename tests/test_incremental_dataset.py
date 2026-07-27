@@ -269,6 +269,44 @@ class IncrementalDatasetTests(unittest.TestCase):
         self.assertEqual(0, summary["merged_rows"])
         self.assertEqual(2, summary["weak_ambiguous_rows_excluded"])
 
+    def test_deduplicates_same_product_id_across_api_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "product.jpg"
+            image.write_bytes(b"same-api-product")
+            image_hash = hashlib.sha256(image.read_bytes()).hexdigest()
+            base_manifest = root / "base.jsonl"
+            base_splits = root / "splits.jsonl"
+            first_manifest = root / "first.jsonl"
+            second_manifest = root / "second.jsonl"
+            write_jsonl(base_manifest, [])
+            write_jsonl(base_splits, [])
+            row = {
+                "sample_id": "openbeautyfacts:1",
+                "leaf_id": "fashion_beauty",
+                "relative_path": str(image),
+                "sha256": image_hash,
+                "source": "openbeautyfacts",
+                "status": "accepted",
+                "license": "cc-by-sa-3.0",
+                "provenance_type": "api_product_image",
+                "review_status": "product_type_weak",
+            }
+            write_jsonl(first_manifest, [row])
+            write_jsonl(second_manifest, [row])
+
+            summary = build_incremental_dataset(
+                base_manifest=base_manifest,
+                base_split_manifest=base_splits,
+                additional_manifests=[],
+                weak_additional_manifests=[first_manifest, second_manifest],
+                categories_path=CATEGORIES,
+                output_dir=root / "output",
+            )
+
+        self.assertEqual(1, summary["weak_additional_train_rows"])
+        self.assertEqual(1, summary["weak_duplicate_sample_ids_excluded"])
+
 
 if __name__ == "__main__":
     unittest.main()

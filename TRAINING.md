@@ -102,6 +102,26 @@ The current RapidOCR baseline measured CER `0.1422` and OCR-text category Top-1
 `0.9091` on 99 synthetic validation pages. These metrics justify OCR fine-tuning but
 are not real-receipt accuracy. See `ml_docs/CASHLOG33_OCR_DATA_EXPANSION.md`.
 
+## 500k anti-overfit expansion (2026-07-27)
+
+The v2 dataset removes explicit category-name hints and renders receipt, statement,
+mobile, and invoice layouts with three Korean fonts and deterministic OCR corruption:
+
+```bash
+.venv/bin/python scripts/launch_training.py cashlog_ocr_category_500k
+tail -f logs/cashlog_ocr_category_500k.log
+```
+
+It contains 501,600 training pages, exactly 15,200 per leaf, plus 3,300 validation
+and 3,300 test pages. Combining every previous text row produces 561,285 train,
+11,367 validation, and 11,388 test rows with zero source-group leakage.
+
+The selected `alpha=1e-5` text candidate improved the v2-only noisy holdout Top-1
+from `0.9200` to `0.9552` and Macro-F1 from `0.9081` to `0.9562`. On actual
+RapidOCR output it improved v2 Top-1 from `0.9293` to `0.9596` and v1 from
+`0.9091` to `0.9192`. The candidate is not automatically served because no frozen
+real-photo holdout exists. See `ml_docs/CASHLOG33_500K_EXPANSION.md`.
+
 ## Pre-deployment error review
 
 Before the first deployment, inspect current-model mismatches against the scored

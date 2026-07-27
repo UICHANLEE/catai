@@ -26,10 +26,12 @@ DEFAULT_OUTPUT = ROOT / "data/processed/cashlog33/ocr_category/v1"
 FONT_CANDIDATES = [
     Path("/System/Library/Fonts/AppleSDGothicNeo.ttc"),
     Path("/System/Library/Fonts/Supplemental/AppleGothic.ttf"),
+    Path("/System/Library/Fonts/Supplemental/AppleMyungjo.ttf"),
     Path("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"),
     Path("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"),
 ]
 SPLITS = ("train", "validation", "test")
+DOCUMENT_STYLES = ("receipt", "statement", "mobile", "invoice")
 DOCUMENT_TITLES = (
     "결제 영수증",
     "거래 명세서",
@@ -51,12 +53,17 @@ def relative_to_root(path: Path) -> str:
         return str(path.resolve())
 
 
-def find_font(explicit: Path | None) -> Path:
+def find_fonts(explicit: Path | None) -> list[Path]:
     candidates = [explicit] if explicit else FONT_CANDIDATES
-    for path in candidates:
-        if path and path.exists():
-            return path
+    fonts = [path for path in candidates if path and path.exists()]
+    if fonts:
+        return fonts
     raise FileNotFoundError("Korean font not found; pass --font")
+
+
+def find_font(explicit: Path | None) -> Path:
+    """Return the first available font for callers that need one fixed face."""
+    return find_fonts(explicit)[0]
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -98,11 +105,21 @@ def transform_points(points: list[list[float]], matrix: np.ndarray) -> list[list
     return [[int(round(x)), int(round(y))] for x, y in transformed]
 
 
+def clip_points(
+    points: list[list[int]], width: int, height: int
+) -> list[list[int]]:
+    return [
+        [max(0, min(width - 1, x)), max(0, min(height - 1, y))]
+        for x, y in points
+    ]
+
+
 def build_lines(
     text: str,
     display_name: str,
     leaf_id: str,
     rng: random.Random,
+    allow_label_hint: bool,
 ) -> list[str]:
     amount = rng.randrange(10, 5000) * 100
     date = f"202{rng.randrange(3, 7)}-{rng.randrange(1, 13):02d}-{rng.randrange(1, 29):02d}"
@@ -115,7 +132,7 @@ def build_lines(
         lines.extend(["결제 승인", f"합계 {amount:,}원", "이용해 주셔서 감사합니다"])
         return lines
     lines.extend(wrap_text(text, rng.randrange(18, 27)))
-    if rng.random() < 0.12:
+    if allow_label_hint and rng.random() < 0.12:
         lines.append(f"분류 메모 {display_name}")
     lines.extend(
         [
@@ -134,12 +151,43 @@ def draw_document(
     font_path: Path,
     width: int,
     height: int,
+    style: str,
 ) -> tuple[Image.Image, list[dict[str, Any]]]:
-    paper = rng.randrange(238, 256)
-    image = Image.new("RGB", (width, height), (paper, paper, max(232, paper - rng.randrange(0, 6))))
+    if style == "mobile":
+        base = rng.randrange(24, 54)
+        background = (base, base + rng.randrange(0, 8), base + rng.randrange(3, 14))
+        ink_range = (215, 252)
+    elif style == "statement":
+        background = (rng.randrange(242, 256), rng.randrange(246, 256), 255)
+        ink_range = (18, 64)
+    elif style == "invoice":
+        background = (255, rng.randrange(248, 256), rng.randrange(236, 251))
+        ink_range = (12, 58)
+    else:
+        paper = rng.randrange(238, 256)
+        background = (paper, paper, max(232, paper - rng.randrange(0, 6)))
+        ink_range = (10, 55)
+    image = Image.new("RGB", (width, height), background)
     draw = ImageDraw.Draw(image)
     margin_x = rng.randrange(28, 54)
     y = rng.randrange(28, 52)
+    if style == "mobile":
+        draw.rounded_rectangle(
+            (12, 12, width - 12, height - 12),
+            radius=22,
+            outline=(90, 100, 118),
+            width=2,
+        )
+        y += 22
+    elif style == "statement":
+        draw.rectangle((0, 0, width, 22), fill=(35, 94, 142))
+        y += 24
+    elif style == "invoice":
+        draw.rectangle(
+            (margin_x - 8, y - 8, width - margin_x + 8, y + 6),
+            fill=(222, 228, 232),
+        )
+        y += 14
     annotations: list[dict[str, Any]] = []
     for line_index, line in enumerate(lines):
         font_size = rng.randrange(20, 29)
@@ -160,7 +208,7 @@ def draw_document(
         x = margin_x + rng.randrange(-4, 9)
         if line_index == 0:
             x = max(margin_x, (width - text_width) // 2)
-        ink = rng.randrange(10, 55)
+        ink = rng.randrange(*ink_range)
         draw.text((x, y), line, font=font, fill=(ink, ink, ink))
         pad = 3
         annotations.append(
@@ -175,13 +223,23 @@ def draw_document(
             }
         )
         y += text_height + rng.randrange(15, 28)
-        if rng.random() < 0.08:
-            draw.line((margin_x, y, width - margin_x, y), fill=(120, 120, 120), width=1)
+        if rng.random() < (0.20 if style in {"statement", "invoice"} else 0.08):
+            rule = 150 if style != "mobile" else 105
+            draw.line((margin_x, y, width - margin_x, y), fill=(rule, rule, rule), width=1)
             y += rng.randrange(8, 16)
-    for _ in range(rng.randrange(4, 15)):
-        x = rng.randrange(width)
-        shade = rng.randrange(210, 246)
-        draw.line((x, 0, x, height), fill=(shade, shade, shade), width=1)
+    if style == "receipt":
+        for _ in range(rng.randrange(4, 15)):
+            x = rng.randrange(width)
+            shade = rng.randrange(210, 246)
+            draw.line((x, 0, x, height), fill=(shade, shade, shade), width=1)
+    elif style == "statement":
+        step = rng.randrange(58, 86)
+        for y_line in range(rng.randrange(220, 280), height - 40, step):
+            draw.line(
+                (margin_x, y_line, width - margin_x, y_line),
+                fill=(205, 218, 228),
+                width=1,
+            )
     return image, annotations
 
 
@@ -212,7 +270,12 @@ def distort_document(
         borderValue=(232, 232, 228),
     )
     transformed = [
-        {"text": row["text"], "points": transform_points(row["points"], matrix)}
+        {
+            "text": row["text"],
+            "points": clip_points(
+                transform_points(row["points"], matrix), width, height
+            ),
+        }
         for row in annotations
     ]
     output = Image.fromarray(warped)
@@ -226,6 +289,18 @@ def distort_document(
         )
         noisy = np.clip(np.asarray(output, dtype=np.float32) + noise, 0, 255).astype(np.uint8)
         output = Image.fromarray(noisy)
+    if rng.random() < 0.18:
+        small_width = max(160, int(width * rng.uniform(0.45, 0.75)))
+        small_height = max(220, int(height * small_width / width))
+        output = output.resize(
+            (small_width, small_height), Image.Resampling.BILINEAR
+        ).resize((width, height), Image.Resampling.BICUBIC)
+    if rng.random() < 0.10:
+        array = np.asarray(output)
+        kernel_size = rng.choice((3, 5, 7))
+        kernel = np.zeros((kernel_size, kernel_size), dtype=np.float32)
+        kernel[kernel_size // 2, :] = 1.0 / kernel_size
+        output = Image.fromarray(cv2.filter2D(array, -1, kernel))
     return output, transformed
 
 
@@ -236,22 +311,32 @@ def render_one(task: dict[str, Any]) -> tuple[str, str, str]:
     rng = random.Random(f"{task['seed']}:{split}:{leaf_id}:{index}")
     width = rng.choice((448, 480, 512, 544))
     height = rng.choice((640, 704, 768))
-    lines = build_lines(str(task["text"]), str(task["display_name"]), leaf_id, rng)
-    image, annotations = draw_document(lines, rng, Path(task["font_path"]), width, height)
+    style = rng.choice(DOCUMENT_STYLES)
+    lines = build_lines(
+        str(task["text"]),
+        str(task["display_name"]),
+        leaf_id,
+        rng,
+        bool(task.get("allow_label_hint", True)),
+    )
+    font_paths = task.get("font_paths") or [task["font_path"]]
+    font_path = Path(rng.choice(font_paths))
+    image, annotations = draw_document(lines, rng, font_path, width, height, style)
     image, annotations = distort_document(image, annotations, rng)
     output_path = Path(task["output_root"]) / "images" / split / leaf_id / f"{index:05d}.jpg"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     quality = rng.randrange(68, 92)
     image.save(output_path, format="JPEG", quality=quality, optimize=True)
     payload = output_path.read_bytes()
-    sample_id = f"cashlog-ocr-synth-v1:{split}:{leaf_id}:{index:05d}"
+    sample_prefix = str(task.get("sample_prefix") or "cashlog-ocr-synth-v1")
+    sample_id = f"{sample_prefix}:{split}:{leaf_id}:{index:06d}"
     relative_path = relative_to_root(output_path)
     manifest = {
         "schema_version": 1,
         "sample_id": sample_id,
         "leaf_id": leaf_id,
         "relative_path": relative_path,
-        "source": "cashlog_ocr_category_synthetic_v1",
+        "source": task.get("source_id") or "cashlog_ocr_category_synthetic_v1",
         "source_text_sample_id": task["source_sample_id"],
         "source_text_group_key": task["source_group_key"],
         "source_text_split": split,
@@ -259,6 +344,8 @@ def render_one(task: dict[str, Any]) -> tuple[str, str, str]:
         "provenance_type": "synthetic_internal_training",
         "label_strength": "deterministic_weak",
         "split": split,
+        "document_style": style,
+        "font": font_path.name,
         "sha256": hashlib.sha256(payload).hexdigest(),
         "width": image.width,
         "height": image.height,
@@ -290,8 +377,9 @@ def task_stream(
     text_by_split_leaf: dict[tuple[str, str], list[dict[str, Any]]],
     counts: dict[str, int],
     output_root: Path,
-    font_path: Path,
+    font_paths: list[Path],
     seed: int,
+    dataset_version: str,
 ) -> Iterable[dict[str, Any]]:
     for split in SPLITS:
         for category in categories:
@@ -307,9 +395,12 @@ def task_stream(
                     "text": source["text"],
                     "source_sample_id": source["sample_id"],
                     "source_group_key": source["group_key"],
-                    "font_path": str(font_path),
+                    "font_paths": [str(path) for path in font_paths],
                     "output_root": str(output_root),
                     "seed": seed,
+                    "sample_prefix": f"cashlog-ocr-synth-{dataset_version}",
+                    "source_id": f"cashlog_ocr_category_synthetic_{dataset_version}",
+                    "allow_label_hint": dataset_version == "v1",
                 }
 
 
@@ -324,6 +415,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-per-leaf", type=int, default=100)
     parser.add_argument("--workers", type=int, default=max(1, min(8, os.cpu_count() or 1)))
     parser.add_argument("--seed", type=int, default=250716)
+    parser.add_argument("--dataset-version", default="v1")
     return parser.parse_args()
 
 
@@ -355,7 +447,7 @@ def main() -> None:
     ]
     if missing:
         raise SystemExit(f"text manifest lacks required split/leaf rows: {missing[:10]}")
-    font_path = find_font(args.font)
+    font_paths = find_fonts(args.font)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = args.output_dir / "manifest.jsonl"
     ocr_path = args.output_dir / "ocr_annotations.jsonl"
@@ -376,8 +468,9 @@ def main() -> None:
         text_by_split_leaf,
         counts,
         args.output_dir,
-        font_path,
+        font_paths,
         args.seed,
+        args.dataset_version,
     )
     try:
         try:
@@ -410,7 +503,7 @@ def main() -> None:
     summary = {
         "schema_version": 1,
         "generated_at": utc_now(),
-        "dataset_version": "cashlog33-ocr-category-v1",
+        "dataset_version": f"cashlog33-ocr-category-{args.dataset_version}",
         "samples": completed,
         "leaf_count": 33,
         "counts_per_leaf": counts,
@@ -418,7 +511,8 @@ def main() -> None:
         "ocr_line_counts": dict(line_counts),
         "bytes": bytes_total,
         "gib": bytes_total / 2**30,
-        "font": str(font_path),
+        "fonts": [str(path) for path in font_paths],
+        "document_styles": list(DOCUMENT_STYLES),
         "seed": args.seed,
         "text_manifest": relative_to_root(args.text_manifest),
         "text_manifest_sha256": hashlib.sha256(args.text_manifest.read_bytes()).hexdigest(),

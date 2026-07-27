@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-27T05:41:08.119231+00:00",
+  "status": "passed",
+  "synthetic": {
+    "samples": 508200,
+    "split_counts": {
+      "train": 501600,
+      "validation": 3300,
+      "test": 3300
+    },
+    "train_leaf_counts": {
+      "comm_internet": 15200,
+      "comm_mobile": 15200,
+      "edu_book": 15200,
+      "edu_class": 15200,
+      "family_kids": 15200,
+      "family_pet": 15200,
+      "fashion_beauty": 15200,
+      "fashion_clothes": 15200,
+      "finance_fee": 15200,
+      "finance_insure": 15200,
+      "finance_save": 15200,
+      "gift_event": 15200,
+      "gift_present": 15200,
+      "health_gym": 15200,
+      "health_med": 15200,
+      "housing_fee": 15200,
+      "housing_rent": 15200,
+      "housing_utility": 15200,
+      "leisure_hobby": 15200,
+      "leisure_show": 15200,
+      "leisure_trip": 15200,
+      "life_appliance": 15200,
+      "life_clean": 15200,
+      "life_goods": 15200,
+      "meal_cafe": 15200,
+      "meal_dining": 15200,
+      "meal_drink": 15200,
+      "meal_grocery": 15200,
+      "misc_other": 15200,
+      "misc_uncat": 15200,
+      "transit_car": 15200,
+      "transit_maintain": 15200,
+      "transit_public": 15200
+    },
+    "unique_hashes": 508200,
+    "ocr_lines": 4434123
+  },
+  "cord": {
+    "samples": 1000,
+    "split_counts": {
+      "train": 800,
+      "validation": 100,
+      "test": 100
+    },
+    "ocr_lines": 23912,
+    "category_training_enabled": false
+  },
+  "recognition": {
+    "skipped": true,
+    "counts": {},
+    "format": null
+  },
+  "combined_full_page_images": 509200,
+  "combined_with_recognition_crops": 509200,
+  "errors": [],
+  "error_count": 0,
+  "scope_warning": "Synthetic and OCR-only data cannot be reported as real CashLog accuracy."
+}

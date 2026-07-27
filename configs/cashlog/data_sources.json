@@ -51,6 +51,16 @@
       "expected_train_images": 105600,
       "cashlog_category_policy": "deterministic_weak_train_and_synthetic_validation",
       "status": "enabled"
+    },
+    {
+      "id": "cashlog_ocr_category_synthetic_v2_500k",
+      "purpose": ["korean_ocr_detection", "ocr_text_category_robustness", "cashlog_33_leaf"],
+      "acquisition": "Deterministic multi-layout rendering with source-group split locks and OCR corruption",
+      "license": "project-generated",
+      "expected_images": 508200,
+      "expected_train_images": 501600,
+      "cashlog_category_policy": "balanced synthetic training; synthetic validation and test are proxy-only",
+      "status": "enabled"
     }
   ],
   "excluded_sources": [

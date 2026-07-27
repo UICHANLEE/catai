@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from scripts.collect_cashlog_cord import flatten_lines
+from scripts.build_cashlog33_ocr_text_manifest import corrupt_text
 from scripts.generate_cashlog33_ocr_category_dataset import find_font, render_one
 
 
@@ -25,6 +26,13 @@ class OcrCategoryDatasetTests(unittest.TestCase):
         self.assertEqual(112200, synthetic["expected_images"])
         self.assertGreaterEqual(synthetic["expected_train_images"], 100000)
         self.assertEqual("enabled", synthetic["status"])
+        expanded = next(
+            row
+            for row in catalog["sources"]
+            if row["id"] == "cashlog_ocr_category_synthetic_v2_500k"
+        )
+        self.assertGreaterEqual(expanded["expected_train_images"], 500000)
+        self.assertEqual(508200, expanded["expected_images"])
 
     def test_synthetic_renderer_emits_image_manifest_and_ocr_boxes(self) -> None:
         try:
@@ -57,6 +65,48 @@ class OcrCategoryDatasetTests(unittest.TestCase):
             self.assertIn("\t[", paddle_line)
             for line in ocr["lines"]:
                 self.assertEqual(4, len(line["points"]))
+
+    def test_v2_renderer_removes_explicit_category_hint(self) -> None:
+        try:
+            font = find_font(None)
+        except FileNotFoundError:
+            self.skipTest("Korean font is unavailable")
+        with tempfile.TemporaryDirectory() as directory:
+            _, ocr_line, _ = render_one(
+                {
+                    "leaf_id": "meal_cafe",
+                    "display_name": "카페·디저트",
+                    "split": "train",
+                    "index": 0,
+                    "text": "아메리카노 4,500원",
+                    "source_sample_id": "source-1",
+                    "source_group_key": "group-1",
+                    "font_paths": [str(font)],
+                    "output_root": directory,
+                    "seed": 500027,
+                    "sample_prefix": "cashlog-ocr-synth-v2",
+                    "source_id": "cashlog_ocr_category_synthetic_v2",
+                    "allow_label_hint": False,
+                }
+            )
+            transcription = json.loads(ocr_line)["transcription"]
+            self.assertNotIn("분류 메모", transcription)
+            self.assertNotIn("카페·디저트", transcription)
+
+    def test_ocr_corruption_is_deterministic(self) -> None:
+        first = corrupt_text("결제 영수증\n아메리카노 4,500원", "sample-1", "train")
+        second = corrupt_text("결제 영수증\n아메리카노 4,500원", "sample-1", "train")
+        self.assertEqual(first, second)
+
+    def test_500k_airflow_dag_is_manual_and_promotion_gated(self) -> None:
+        source = (ROOT / "dags/cashlog33_500k_training_dag.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('dag_id="cashlog33_500k_training_pipeline"', source)
+        self.assertIn("schedule=None", source)
+        self.assertIn("build_cashlog33_500k_dataset.sh", source)
+        self.assertIn("--alpha 0.00001", source)
+        self.assertNotIn("hybrid.serving.json", source)
 
     def test_cord_boxes_are_flattened_without_cashlog_labels(self) -> None:
         lines = flatten_lines(
