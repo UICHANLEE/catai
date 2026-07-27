@@ -1,438 +1,654 @@
-# CashLog 33-Leaf Execution Log
+# CashLog 33개 Leaf 실행 기록
 
-Run date: 2026-07-17 (Asia/Seoul)
-Taxonomy: `13.33.1`, exactly 33 leaf IDs
-Selected serving family: `cashlog33-hybrid-v1`
-Decision: `guarded_integration_candidate`, not production-promoted
+최초 실행일: 2026-07-17 (Asia/Seoul)
+최종 갱신일: 2026-07-27
+분류체계: `13.33.1`, 정확히 33개 leaf ID
+현재 서빙 모델: `cashlog33-all-data-mps-v1`
+운영 결정: 실제 사진 검증 전까지 `guarded_integration_candidate`
 
-## 1. Outcome
+## 1. 전체 결과
 
-The complete dataset-to-selection DAG ran successfully after one bounded-memory
-training fix. It covers all 33 CashLog leaf IDs, logs component and end-to-end runs
-to MLflow, produces checksum-pinned candidate artifacts, and serves authenticated
-Top-3 recommendations from a loopback-only Docker API.
+데이터 수집부터 학습, 평가, 후보 선정까지 이어지는 전체 DAG를 실행했다.
+최초 실행에서는 메모리 제한으로 시각 헤드 학습이 한 번 실패했으나,
+배치 단위 스트리밍으로 수정한 뒤 모든 작업이 완료됐다.
 
-This run does **not** establish production accuracy. There is no frozen, manually
-labeled real-photo holdout yet. Synthetic receipts, weak text labels, and Open Images
-object proxies are kept as separate scopes throughout the reports. Automatic category
-confirmation remains disabled.
+현재 파이프라인은 다음을 지원한다.
 
-## 2. Orchestrated Run
+- CashLog의 33개 leaf ID 계약 검증
+- 구성 모델과 E2E 평가 결과의 MLflow 기록
+- SHA-256으로 고정된 후보 모델 생성
+- Airflow 기반 데이터 및 학습 흐름 관리
+- Jenkins에서 Airflow 실행을 호출하는 자동화
+- 루프백 전용 MPS 모델 API에서 인증된 Top 3 추천 제공
 
-| Field | Value |
+현재 결과는 **실제 서비스 사진에서 95% 정확도를 입증한 결과가 아니다.**
+동결된 수동 라벨 실제 사진 holdout이 아직 없으며, 합성 영수증, 약한 텍스트
+라벨, Open Images 객체 프록시는 서로 다른 평가 범위로 관리한다.
+따라서 자동 카테고리 확정은 계속 비활성화한다.
+
+## 2. Airflow 최초 통합 실행
+
+| 항목 | 값 |
 |---|---|
 | Airflow DAG | `cashlog33_training_pipeline` |
-| DAG run ID | `codex-20260717T0411KST` |
-| Start | `2026-07-16T19:11:16.693054+00:00` |
-| End | `2026-07-16T19:26:24.352695+00:00` |
-| Final state | `success` |
-| Task result | 9 of 9 tasks `success` |
-| DAG import errors after restart | 0 |
+| DAG 실행 ID | `codex-20260717T0411KST` |
+| 시작 | `2026-07-16T19:11:16.693054+00:00` |
+| 종료 | `2026-07-16T19:26:24.352695+00:00` |
+| 최종 상태 | `success` |
+| 작업 결과 | 9개 중 9개 `success` |
+| 재시작 후 DAG import 오류 | 0 |
 
-Task results:
+작업별 결과:
 
-| Task | Attempts | Result |
+| 작업 | 시도 횟수 | 결과 |
 |---|---:|---|
-| `validate_inputs` | 1 | success |
-| `build_text_dataset` | 1 | success |
-| `score_visual_proxy` | 1 | success |
-| `train_text` | 1 | success |
-| `train_vision_head` | 2 | success |
-| `build_candidate_config` | 1 | success |
-| `generate_e2e_fixtures` | 1 | success |
-| `evaluate_candidate` | 1 | success |
-| `select_candidate` | 1 | success |
+| `validate_inputs` | 1 | 성공 |
+| `build_text_dataset` | 1 | 성공 |
+| `score_visual_proxy` | 1 | 성공 |
+| `train_text` | 1 | 성공 |
+| `train_vision_head` | 2 | 성공 |
+| `build_candidate_config` | 1 | 성공 |
+| `generate_e2e_fixtures` | 1 | 성공 |
+| `evaluate_candidate` | 1 | 성공 |
+| `select_candidate` | 1 | 성공 |
 
-The first vision-head attempt exited with code 137. The trainer retained 1,068
-augmented PIL images at once and exceeded the Airflow container's practical memory
-budget. `scripts/train_cashlog33_vision_head.py` was changed to stream bounded image
-batches, release each batch, and collect garbage; the DAG batch size was reduced from
-16 to 4. Attempt two completed at roughly 2.08 GiB resident container memory.
+첫 번째 시각 헤드 학습은 종료 코드 137로 중단됐다. 학습기가 증강된 PIL 이미지
+1,068장을 한꺼번에 메모리에 유지해 Airflow 컨테이너의 실사용 메모리 한도를
+초과한 것이 원인이었다.
 
-## 3. MLflow Runs
+`scripts/train_cashlog33_vision_head.py`를 제한된 크기의 이미지 배치를 순차적으로
+처리하고 각 배치를 즉시 해제하도록 수정했다. DAG 배치 크기도 16에서 4로
+낮췄다. 두 번째 시도는 컨테이너 상주 메모리 약 2.08 GiB에서 완료됐다.
 
-Experiment ID `3`, name `cashlog33-hybrid-v2`:
+## 3. MLflow 실행 기록
 
-| Scope | Run ID | State |
+최초 통합 실험은 experiment ID `3`, 이름 `cashlog33-hybrid-v2`에 기록됐다.
+
+| 범위 | Run ID | 상태 |
 |---|---|---|
-| Airflow text training | `7733ae80f3b44e59a25c68657411efcf` | FINISHED |
-| Airflow vision-head training | `9307a30f940a40a988342652e71997e3` | FINISHED |
-| Airflow hybrid E2E | `139ab7ba17d84c05bc02c1c5246256c4` | FINISHED |
-| Pinned serving-config E2E | `59a60db4e3d446fb97ab199d05b43291` | FINISHED |
+| Airflow 텍스트 학습 | `7733ae80f3b44e59a25c68657411efcf` | `FINISHED` |
+| Airflow 시각 헤드 학습 | `9307a30f940a40a988342652e71997e3` | `FINISHED` |
+| Airflow 하이브리드 E2E | `139ab7ba17d84c05bc02c1c5246256c4` | `FINISHED` |
+| 고정된 서빙 설정 E2E | `59a60db4e3d446fb97ab199d05b43291` | `FINISHED` |
 
-MLflow stores parameters, metrics, status, and report artifacts. The service is bound
-to `http://127.0.0.1:5500`; it is not an internet-facing production service.
+MLflow에는 파라미터, 지표, 실행 상태, 평가 산출물을 저장한다.
+서비스 주소는 `http://127.0.0.1:5500`이며 인터넷에 공개하지 않는다.
 
-## 4. Data Acquisition and Coverage
+2026-07-27 전체 데이터 MPS 실행은 `cashlog33-all-data-mps` 실험에 별도로
+기록했다. 해당 Run ID와 결과는 17절에 정리했다.
 
-| Source | Accepted output | Coverage | Decision |
+## 4. 최초 데이터 수집 및 범위
+
+다음 표는 2026-07-17 최초 통합 실행 당시의 데이터 상태다.
+
+| 소스 | 반영 결과 | 범위 | 결정 |
 |---|---:|---:|---|
-| Revision-pinned MIT synthetic bank transactions | 18,669 text rows | weak mapping where available | used as proxy training data |
-| Deterministic CashLog templates | 15,840 text rows | 33/33 leaves | used for routing/training support |
-| Open Images V7 validation | 411 images | 23/33 leaves | used as visual object proxy |
-| Fixed Noto receipt renderer | 99 images | 3 x 33 leaves | E2E I/O test only |
-| Openverse API | no selected rows | n/a | anonymous API returned 401/429; excluded |
-| PD12M discovery | no selected rows | n/a | dataset API/index returned 500-class errors; excluded |
+| 리비전 고정 MIT 합성 은행 거래 | 텍스트 18,669건 | 매핑 가능한 leaf의 약한 라벨 | 프록시 학습에 사용 |
+| CashLog 결정적 템플릿 | 텍스트 15,840건 | 33/33 leaf | 라우팅 및 학습 보조 |
+| Open Images V7 validation | 이미지 411장 | 23/33 leaf | 시각 객체 프록시 |
+| 고정 Noto 영수증 렌더러 | 이미지 99장 | leaf당 3장 | E2E I/O 테스트 전용 |
+| Openverse API | 선택 데이터 없음 | 해당 없음 | 익명 API 401/429로 당시 제외 |
+| PD12M 탐색 | 선택 데이터 없음 | 해당 없음 | 데이터셋 API/index 500 계열 오류로 제외 |
 
-The text dataset has 34,509 rows: 26,794 train, 3,839 validation, and 3,876
-test. Group-based deterministic splitting prevents variations of one source/template
-from crossing splits. Open Images collection removed 4,058 ambiguous cross-leaf
-mappings and recorded no accepted-image download failures.
+최초 텍스트 데이터셋은 34,509건으로 구성됐다.
 
-Open Images intentionally covers only 23 leaves. Rent, utilities, internet/TV,
-financial products, and unclassified/other meanings cannot be inferred reliably from
-generic object labels. OCR/text and safe fallback are the primary evidence paths for
-those categories until real CashLog photos exist.
+- 학습: 26,794건
+- 검증: 3,839건
+- 테스트: 3,876건
 
-## 5. Measured Results by Scope
+같은 원본이나 템플릿의 변형이 서로 다른 split으로 넘어가지 않도록 group 기반
+결정적 분할을 사용했다. Open Images 수집에서는 여러 CashLog leaf에 동시에
+매핑되는 모호한 이미지 4,058장을 제외했고, 승인된 이미지의 다운로드 실패는
+없었다.
 
-| Evaluation scope | Samples / leaves | Top-1 | Top-3 | Macro F1 |
+Open Images holdout은 의도적으로 23개 leaf만 포함한다. 월세, 공과금,
+인터넷·TV, 금융 상품, 미분류 및 기타 의미는 일반 객체 라벨만으로 신뢰성 있게
+추론할 수 없다. 실제 CashLog 사진이 충분히 쌓이기 전까지 해당 카테고리는
+OCR·텍스트와 안전 fallback을 핵심 증거로 사용한다.
+
+## 5. 최초 범위별 측정 결과
+
+| 평가 범위 | 샘플 / leaf | Top-1 | Top-3 | Macro F1 |
 |---|---:|---:|---:|---:|
-| SigLIP2 zero-shot, Open Images proxy holdout | 82 / 23 | 0.5976 | 0.7073 | 0.5995 |
-| Trained SigLIP2 linear head, same holdout | 82 / 23 | 0.7927 | 0.9390 | 0.8094 |
-| TF-IDF SGD, synthetic/weak text test | 3,876 / 33 | 0.9972 | 0.9995 | 0.9981 |
-| Full hybrid, fixed Noto synthetic receipts | 99 / 33 | 0.9899 | 0.9899 | 0.9896 |
+| SigLIP2 zero-shot, Open Images 프록시 holdout | 82 / 23 | 0.5976 | 0.7073 | 0.5995 |
+| 학습된 SigLIP2 선형 헤드, 동일 holdout | 82 / 23 | 0.7927 | 0.9390 | 0.8094 |
+| TF-IDF SGD, 합성·약한 라벨 텍스트 테스트 | 3,876 / 33 | 0.9972 | 0.9995 | 0.9981 |
+| 전체 하이브리드, 고정 Noto 합성 영수증 | 99 / 33 | 0.9899 | 0.9899 | 0.9896 |
 
-The fixed synthetic hybrid run has minimum leaf recall `0.6667`, ECE `0.2743`,
-false auto-confirm rate `0.0`, fallback rate `0.0404`, and local Mac p95 latency
-`0.3776` seconds. The same fixtures inside Airflow produced Top-1 `0.9899` and p95
-`1.3453` seconds. Every prediction still requested user confirmation.
+고정 합성 하이브리드 실행의 추가 지표는 다음과 같다.
 
-These are proxy and integration metrics, not real-app accuracy. In particular, the
-high synthetic text score is expected to be optimistic and the ECE already fails the
-production calibration threshold.
+- 최소 leaf recall: `0.6667`
+- ECE: `0.2743`
+- 잘못된 자동확정 비율: `0.0`
+- fallback 비율: `0.0404`
+- 로컬 Mac p95 지연: `0.3776초`
+- Airflow 컨테이너 p95 지연: `1.3453초`
 
-## 6. Architecture and I/O Decision
+모든 예측은 사용자 확인을 요구하도록 설정했다.
 
-Inference members:
+위 수치는 프록시와 통합 테스트 지표이며 실제 앱 정확도가 아니다.
+특히 합성 텍스트 정확도는 실제보다 낙관적으로 측정될 수 있고, ECE는 이미
+운영 자동확정 기준을 통과하지 못한다.
 
-1. SigLIP2 base patch16 224 embedding and 33-leaf zero-shot prior.
-2. A trained logistic linear head over frozen SigLIP2 embeddings.
-3. Locally pinned RapidOCR detector, classifier, and Korean recognizer ONNX files.
-4. Word/character TF-IDF SGD text classifier.
-5. Normalized CashLog OCR lexicon and conservative unreadable-input fallback.
+## 6. 모델 아키텍처 및 I/O 결정
 
-Input is multipart `image` or JSON `imageBase64`, limited to JPEG, PNG, WebP,
-HEIC, and HEIF. The API checks declared size, decoded size, file signature/MIME,
-decode success, and pixel count before inference. Output includes taxonomy version,
-model version, one recommended leaf, Top 3 probabilities, OCR/evidence fields,
-fallback reasons, and `need_user_check`.
+추론 앙상블 구성:
 
-Training output is isolated under `checkpoints/cashlog33/airflow_latest`; training
-never overwrites `configs/cashlog/hybrid.serving.json`. Selection verifies SHA-256 for
-the vision model, vision head, text model, and all three OCR ONNX files before a
-candidate can pass the integration gate.
+1. SigLIP2 base patch16 224 임베딩 및 33개 leaf zero-shot prior
+2. 고정 SigLIP2 임베딩 위에서 학습한 logistic 선형 헤드
+3. 로컬에 해시 고정된 RapidOCR detector, classifier, 한국어 recognizer ONNX
+4. 단어·문자 TF-IDF SGD 텍스트 분류기
+5. 정규화된 CashLog OCR lexicon과 보수적인 판독 불가 fallback
+6. 기존 식사 확률 안에서만 `meal_dining`과 `meal_cafe`를 재분배하는
+   MobileNetV4 UECFood specialist
 
-## 7. Model Selection
+입력 형식:
 
-The hybrid is selected because expense category meaning frequently appears in Korean
-merchant/item text rather than image shape. The trained visual head improved Top-1 by
-about 19.5 percentage points over zero-shot on the identical proxy holdout, while OCR
-and text evidence correctly route categories that generic visual data cannot model.
+- multipart의 `image`
+- JSON의 `imageBase64`
+- 지원 이미지: JPEG, PNG, WebP, HEIC, HEIF
 
-Rejected or superseded attempts:
+API는 추론 전에 선언 크기, 실제 디코딩 크기, 파일 signature와 MIME,
+디코딩 성공 여부, 전체 픽셀 수를 검증한다.
 
-| Attempt | Failure or limitation | Resolution |
+출력에는 분류체계 버전, 모델 버전, 추천 leaf 1개, Top 3 확률, OCR 및 근거,
+fallback 사유, `need_user_check`가 포함된다.
+
+학습 산출물은 `checkpoints/cashlog33/airflow_latest` 아래에 격리한다.
+학습 작업은 `configs/cashlog/hybrid.serving.json`을 자동으로 덮어쓰지 않는다.
+후보가 통합 게이트를 통과하려면 시각 모델, 시각 헤드, 텍스트 모델, OCR ONNX
+3개의 SHA-256이 설정과 일치해야 한다.
+
+## 7. 모델 선정 근거와 실패 이력
+
+지출 카테고리 의미는 이미지 형태보다 한국어 상호명, 품목명, 거래 문구에서
+드러나는 경우가 많다. 동일한 프록시 holdout에서 학습된 시각 헤드는 zero-shot
+대비 Top-1을 약 19.5%p 높였다. OCR과 텍스트 경로는 일반 시각 데이터가
+표현하기 어려운 카테고리를 보완한다.
+
+거절되거나 대체된 실험:
+
+| 시도 | 실패 또는 한계 | 처리 |
 |---|---|---|
-| Old four-leaf EfficientNet run | heartbeat timeout after epoch 25; wrong taxonomy for this task | retained only as historical evidence; not selected |
-| ConvNeXt candidate | process exit 137 under host memory pressure | rejected; frozen SigLIP2 embeddings plus linear head selected |
-| Eager vision augmentation | Airflow attempt one exit 137 | bounded streaming batches; retry succeeded |
-| Initial MLflow artifacts | server advertised a read-only workspace artifact URI | enabled the MLflow artifact proxy using `mlflow-artifacts:/` |
-| One host-side E2E MLflow call | sandbox denied the local loopback socket and the client retried indefinitely | stopped that attempt; reran with local service access and finished |
-| Apple-font synthetic fixtures | materially different OCR score from Linux | fixed Noto font and one immutable 99-image fixture set for cross-runtime comparison |
+| 기존 4-leaf EfficientNet | epoch 25 이후 heartbeat timeout, 현재 분류체계와 불일치 | 과거 기록만 보존하고 미선정 |
+| ConvNeXt 후보 | 호스트 메모리 압박으로 종료 코드 137 | 고정 SigLIP2 임베딩과 선형 헤드로 대체 |
+| 증강 이미지 일괄 적재 | Airflow 첫 실행 종료 코드 137 | 제한된 스트리밍 배치로 수정 후 성공 |
+| 초기 MLflow 산출물 | 읽기 전용 workspace artifact URI를 광고 | `mlflow-artifacts:/` 프록시 활성화 |
+| 호스트 E2E MLflow 호출 1건 | sandbox가 로컬 loopback socket을 차단해 무한 재시도 | 실행 중단 후 로컬 서비스 접근 권한으로 재실행 |
+| Apple 폰트 합성 fixture | Linux와 OCR 점수가 크게 달랐음 | Noto 폰트와 고정 99장 fixture로 통일 |
+| 잘못된 UECFood 4-class 매핑 | `tea`가 `steak`, `steamed`에 부분 일치 | 해당 실험 폐기, 단어 경계 매칭으로 수정 |
+| 전체 UECFood 미세조정 후보 | 동일 검증셋에서 기존 specialist보다 낮음 | 학습 산출물은 보존하되 서빙 모델로 미선정 |
 
-## 8. Serving Verification
+## 8. 최초 서빙 검증
 
-The production API image was rebuilt from `Dockerfile.api` for Linux ARM64. Its
-uncompressed Docker size is 592,340,355 bytes and digest is
-`sha256:64e212fda1c2a030bc89dfdfe06407ba5c5660a8c1c2a1259cb46ef21d1041dd`.
-Model/checkpoint directories are mounted read-only and are not baked into the image.
-The runtime uses uid/gid `10001`, a read-only root filesystem, a bounded tmpfs,
-all Linux capabilities dropped, `no-new-privileges`, and an offline model runtime.
+Linux ARM64용 API 이미지를 `Dockerfile.api`에서 다시 빌드했다.
 
-Final local checks against `127.0.0.1:8010`:
+- 압축 해제 Docker 크기: 592,340,355 bytes
+- digest:
+  `sha256:64e212fda1c2a030bc89dfdfe06407ba5c5660a8c1c2a1259cb46ef21d1041dd`
+- 모델 및 체크포인트 디렉터리: read-only mount
+- 런타임 uid/gid: `10001`
+- root filesystem: read-only
+- 임시 저장소: 용량 제한 tmpfs
+- Linux capability: 전부 제거
+- `no-new-privileges` 적용
+- 모델 런타임: offline
 
-| Check | Result |
+`127.0.0.1:8010` 최초 검증:
+
+| 검사 | 결과 |
 |---|---|
-| Health and runtime availability | HTTP 200, hybrid runtime available |
-| Missing internal key | HTTP 401 |
-| Invalid Base64 image with a valid key | HTTP 400 |
-| `X-Internal-API-Key` compatibility | HTTP 200 |
-| Existing CashLog `X-API-Key` compatibility | HTTP 200 |
-| Real app cafe receipt canary | `meal_cafe`, confidence 0.8143 |
+| health 및 런타임 | HTTP 200, 하이브리드 런타임 사용 가능 |
+| 내부 키 누락 | HTTP 401 |
+| 유효한 키와 잘못된 Base64 이미지 | HTTP 400 |
+| `X-Internal-API-Key` 호환성 | HTTP 200 |
+| 기존 CashLog `X-API-Key` 호환성 | HTTP 200 |
+| 실제 앱 카페 영수증 canary | `meal_cafe`, confidence 0.8143 |
 | Canary Top 3 | `meal_cafe`, `meal_drink`, `meal_dining` |
-| Canary taxonomy/model | `13.33.1`, `cashlog33-hybrid-v1` |
-| Canary decision | `need_user_check=true` |
+| 당시 canary 분류체계/모델 | `13.33.1`, `cashlog33-hybrid-v1` |
+| Canary 결정 | `need_user_check=true` |
 
-The first authenticated request included cold model/OCR loading and took about 16.6
-seconds end to end; the repeated warm request took about 2.0 seconds. Cold-start
-preloading and real-device latency must be measured before production promotion.
+최초 인증 요청은 모델과 OCR의 cold loading을 포함해 약 16.6초가 걸렸다.
+반복 warm 요청은 약 2.0초였다. 이후 MPS native 서비스와 입력 압축을 적용한
+개선 결과는 12절과 13절에 기록했다.
 
-## 9. Promotion Status and Remaining Inputs
+## 9. 운영 승격 상태와 남은 입력
 
-The current selector result is `integration_ready=true`,
-`production_eligible=false`, and `auto_confirm_enabled=false`. The mandatory missing
-input is a frozen, consented, manually reviewed real-photo holdout:
+현재 통합 selector의 의미는 다음과 같다.
 
-- At least 330 photos and at least 10 independent photos for every one of 33 leaves.
-- Correct `leaf_id`, SHA-256, de-identified group ID, consent status, and manual review.
-- No train/threshold tuning reuse, no duplicate or near-duplicate split leakage.
-- Redacted PII and a defined private-storage retention/deletion policy.
+- `integration_ready=true`
+- `production_eligible=false`
+- `auto_confirm_enabled=false`
 
-After that input exists, one frozen run must pass Top-1 `>=0.95`, Top-3 `>=0.95`,
-macro F1 `>=0.75`, every leaf recall `>=0.60`, ECE `<=0.08`, false auto-confirm
-`<=0.02`, and p95 latency `<=3s` before automatic confirmation can be considered.
+필수로 부족한 입력은 동결되고, 사용 동의를 받았으며, 사람이 직접 검수한 실제
+사진 holdout이다.
 
-Deployment-specific operator actions still required:
+- 총 330장 이상
+- 33개 leaf마다 독립적인 사진 10장 이상
+- 올바른 `leaf_id`, SHA-256, 비식별 group ID, 동의 상태, 수동 검수 상태
+- 학습이나 임계값 조정에 재사용하지 않음
+- 동일 이미지 및 유사 이미지의 split 간 누수 금지
+- 개인정보 비식별화와 private storage 보존·삭제 정책 적용
 
-1. Set one rotated secret as worker `CATAI_INTERNAL_API_KEY` and CashLog backend
-   `PRODUCT_ANALYZER_API_KEY`; never place it in React Native or a `VITE_` variable.
-2. Create Jenkins credential `airflow-local-basic` and a Pipeline job using
-   `Jenkinsfile`.
-3. Add the actual Backend/Home Server as a Tailnet node and apply the documented
-   ACL. The current Tailnet contains only the Mac model worker and Galaxy relay.
-4. Replace the local Airflow bootstrap `admin/admin` before any non-loopback use.
+실제 holdout이 준비되면 한 번의 동결 평가에서 다음 기준을 모두 통과해야 한다.
 
-## 10. Galaxy Deployment Verification
+- Top-1 `>=0.95`
+- Top-3 `>=0.95`
+- Macro F1 `>=0.75`
+- 모든 leaf recall `>=0.60`
+- ECE `<=0.08`
+- 잘못된 자동확정 비율 `<=0.02`
+- p95 지연 `<=3초`
 
-The private relay was deployed to the Galaxy under
-`~/services/cashlog-gateway` on 2026-07-17. The device is Android/aarch64 with
-Termux Python 3.13.13. The CashLog application repository on the phone was not
-modified; the relay has an isolated service directory and Python environment.
+운영자가 추가로 수행해야 하는 배포 작업:
 
-The existing relay exposed a concrete authentication defect: it forwarded the
-incoming gateway key but did not add `X-Internal-API-Key`, while the Mac model
-worker required that header. `/health` therefore returned 200 even though actual
-inference could fail upstream authentication. The deployed relay now forwards two
-independent credentials, streams request bodies with a 14 MiB limit, caps JSON
-responses at 2 MiB, disables redirects and access logs, and requires the gateway
-key for health checks.
+1. 회전 가능한 하나의 secret을 worker의 `CATAI_INTERNAL_API_KEY`와 CashLog
+   backend의 `PRODUCT_ANALYZER_API_KEY`로 설정한다.
+2. 해당 secret을 React Native 또는 `VITE_` 변수에 넣지 않는다.
+3. Jenkins credential `airflow-local-basic`과 `Jenkinsfile` 기반 Pipeline을
+   생성한다.
+4. 실제 Backend/Home Server를 Tailnet node로 추가하고 문서화된 ACL을 적용한다.
+5. 로컬 Airflow bootstrap 계정 `admin/admin`을 loopback 외부 사용 전에
+   반드시 교체한다.
 
-Deployment checks:
+## 10. Galaxy 배포 검증
 
-| Check | Result |
+2026-07-17 Galaxy의 `~/services/cashlog-gateway`에 private relay를 배포했다.
+기기는 Android/aarch64와 Termux Python 3.13.13을 사용한다. 휴대폰의 CashLog
+앱 저장소는 수정하지 않았으며 relay는 별도의 서비스 디렉터리와 Python 환경을
+사용한다.
+
+기존 relay에는 실제 인증 결함이 있었다. 들어온 gateway key는 전달했지만
+Mac 모델 worker가 요구하는 `X-Internal-API-Key`를 추가하지 않았다.
+그 결과 `/health`는 200이어도 실제 추론은 upstream 401로 실패할 수 있었다.
+
+수정된 relay는 다음을 적용한다.
+
+- 서로 다른 gateway key와 model API key 전달
+- 요청 body streaming 및 14 MiB 제한
+- JSON 응답 2 MiB 제한
+- redirect 비활성화
+- access log 비활성화
+- health 검사에도 gateway key 요구
+
+배포 검증:
+
+| 검사 | 결과 |
 |---|---|
-| Dedicated SSH identity | key login succeeded |
-| SSH password / keyboard login | disabled and actively rejected |
-| SSH forwarding policy | reverse only; `GatewayPorts no` |
-| Secret files | mode `600`; values never printed or committed |
-| Relay without or with wrong key | HTTP 401 |
-| Authenticated relay health | HTTP 200 |
-| Galaxy-to-Mac tunnel health | HTTP 200 |
-| Existing cafe receipt through Galaxy | `meal_cafe`, confidence 0.8143 |
-| Warm end-to-end relay latency | 2.01 seconds |
-| Galaxy LAN ports 8000 and 18010 | connection refused |
-| Direct Cloudflare Quick Tunnel | restored for the explicitly requested test phase; URL is ephemeral |
-| Galaxy Tailscale-only gateway bind | authenticated HTTP 200; unauthenticated 401 |
-| macOS reverse-tunnel LaunchAgent | running; automatic restart verified |
-| Obsolete reverse tunnels | removed; only managed loopback tunnel remains |
-| Final Tailscale image E2E | `meal_cafe`, confidence 0.8143, 2.28 seconds |
+| 전용 SSH identity | 키 로그인 성공 |
+| SSH password 및 keyboard login | 비활성화, 실제 거부 확인 |
+| SSH forwarding 정책 | reverse 전용, `GatewayPorts no` |
+| secret 파일 | mode `600`, 값 출력 및 커밋 금지 |
+| 키 누락 또는 잘못된 relay 호출 | HTTP 401 |
+| 인증된 relay health | HTTP 200 |
+| Galaxy에서 Mac tunnel health | HTTP 200 |
+| 기존 카페 영수증 Galaxy 경유 | `meal_cafe`, confidence 0.8143 |
+| warm E2E relay 지연 | 2.01초 |
+| Galaxy LAN 포트 8000 및 18010 | 연결 거부 |
+| Cloudflare Quick Tunnel | 명시적으로 요청된 테스트 단계에서만 복구, URL은 임시 |
+| Galaxy Tailscale 전용 gateway bind | 인증 시 HTTP 200, 미인증 시 401 |
+| macOS reverse-tunnel LaunchAgent | 실행 및 자동 재시작 확인 |
+| 오래된 reverse tunnel | 제거, 관리되는 loopback tunnel만 유지 |
+| 최종 Tailscale 이미지 E2E | `meal_cafe`, confidence 0.8143, 2.28초 |
 
-The Galaxy relay is bound only to its assigned Tailscale IPv4 address. The same
-port on the Wi-Fi/LAN address refuses connections. A macOS user LaunchAgent keeps
-the reverse tunnel alive over the Galaxy Tailscale address; forced restart changed
-the SSH process and recovered model health to HTTP 200 automatically. Both the
-gateway bind and selected loopback model URL are stored in owner-only runtime files,
-not in the repository.
+Galaxy relay는 할당된 Tailscale IPv4 주소에만 bind한다. 같은 포트로 Galaxy의
+Wi-Fi/LAN 주소에 연결하면 거부된다. macOS 사용자 LaunchAgent가 Galaxy
+Tailscale 주소를 통해 reverse tunnel을 유지한다. 강제 재시작으로 SSH process가
+교체된 뒤에도 모델 health가 자동으로 HTTP 200으로 복구되는 것을 확인했다.
 
-The private Mac-to-Galaxy model path is complete. During the current test phase an
-ephemeral Cloudflare Quick Tunnel is active in front of the authenticated Galaxy
-gateway and Vercel points to that URL. React Native still receives neither the
-Galaxy address nor the gateway key. This test tunnel must be replaced by a named,
-policy-controlled tunnel before production release.
+gateway bind 주소와 선택된 loopback 모델 URL은 저장소가 아니라 소유자 전용
+runtime 파일에 저장한다.
 
-## 11. Monitoring Locations
+현재 테스트 단계에서는 인증된 Galaxy gateway 앞에 임시 Cloudflare Quick
+Tunnel이 있고 Vercel이 해당 URL을 사용한다. React Native에는 Galaxy 주소나
+gateway key를 전달하지 않는다. 운영 배포 전에는 임시 tunnel을 이름과 정책이
+고정된 Cloudflare Tunnel로 교체해야 한다.
 
-- Airflow: `http://127.0.0.1:8080`, DAG run `codex-20260717T0411KST`.
-- MLflow: `http://127.0.0.1:5500`, experiment `cashlog33-hybrid-v2`.
-- Jenkins: `http://127.0.0.1:8081` after local setup.
-- Model report: `http://127.0.0.1:8010/report` or
-  `reports/cashlog33/model_report/index.html`.
-- Machine-readable selection: `reports/cashlog33/model_selection.json`.
+## 11. 모니터링 위치
 
-The online service should monitor request/error count, warm and cold latency,
-fallback rate, review rate, selected Top-3 rank, and correction rate by leaf/model.
-Raw images, OCR text containing PII, JWTs, and internal API keys must not be logged.
+- Airflow: `http://127.0.0.1:8080`
+- 최초 DAG 실행: `codex-20260717T0411KST`
+- MLflow: `http://127.0.0.1:5500`
+- 최초 실험: `cashlog33-hybrid-v2`
+- 전체 데이터 MPS 실험: `cashlog33-all-data-mps`
+- Jenkins: 로컬 설정 후 `http://127.0.0.1:8081`
+- 모델 리포트: `http://127.0.0.1:8010/report`
+- 정적 리포트: `reports/cashlog33/model_report/index.html`
+- 기계 판독 모델 선정 결과: `reports/cashlog33/model_selection.json`
+- 모델 API 로그: `logs/model-api.jsonl`
+- 프로세스 오류: `logs/model-api.error.log`
 
-## 12. MPS Accuracy, Latency, and Observability Update (2026-07-17)
+온라인 서비스에서 모니터링해야 할 지표:
 
-The worker was moved from the Linux Docker CPU runtime to a loopback-only macOS
-LaunchAgent because Docker Desktop cannot expose Apple MPS. The service now eagerly
-loads and warms the model, runs SigLIP2 in FP16 on MPS, overlaps MPS vision with CPU
-OCR, bounds large OCR inputs, and records stage timing without image/OCR contents.
+- 요청 수와 오류 수
+- warm 및 cold 지연
+- fallback 비율
+- 사용자 검토 비율
+- 선택된 항목의 Top 3 순위
+- leaf 및 모델 버전별 수정 비율
 
-The first aggressive OCR resize failed the new Top-1 95% gate at 93.94%. It was
-rejected. Restoring a 736px OCR minimum while capping large inputs at 960px recovered
-the fixed 33-leaf integration result to Top-1 98.99% and Top-3 98.99%.
+원본 이미지, 개인정보가 포함된 OCR 텍스트, JWT, 내부 API key는 로그에
+기록하지 않는다.
 
-| Measurement | Before | After |
+## 12. MPS 정확도, 지연 및 관측성 개선 (2026-07-17)
+
+Docker Desktop은 Apple MPS를 노출하지 않으므로 모델 worker를 Linux Docker
+CPU에서 loopback 전용 macOS LaunchAgent로 이동했다.
+
+적용 사항:
+
+- 모델 eager load 및 warmup
+- SigLIP2 FP16 MPS 추론
+- MPS 시각 처리와 CPU OCR 병렬 실행
+- 큰 OCR 입력 크기 제한
+- 이미지 및 OCR 원문을 기록하지 않는 단계별 지연 로그
+
+첫 번째 공격적인 OCR resize는 Top-1 95% 게이트에서 93.94%로 실패해
+거절했다. OCR 최소 크기를 736px로 복구하고 큰 입력을 960px로 제한하자 고정
+33-leaf 통합 결과가 Top-1 98.99%, Top-3 98.99%로 회복됐다.
+
+| 측정 항목 | 적용 전 | 적용 후 |
 |---|---:|---:|
 | 33-leaf fixture p50 | 349ms | 233ms |
 | 33-leaf fixture p95 | 378ms | 278ms |
-| Repeated 1254px cafe image, local API | about 710ms CPU Docker | about 350ms native MPS |
-| SigLIP2 vision stage p50 | not recorded | 44ms |
-| OCR stage p50 on fixtures | not recorded | 224ms |
+| 1254px 카페 이미지 반복, 로컬 API | CPU Docker 약 710ms | native MPS 약 350ms |
+| SigLIP2 시각 단계 p50 | 기록 없음 | 44ms |
+| fixture OCR 단계 p50 | 기록 없음 | 224ms |
 
-The UECFood meal specialist was retrained for two MPS epochs after removing double
-class balancing. Its fixed 4,249-image validation reached Top-1 98.05% and Top-3
-100%. Its scope is only `meal_dining` and `meal_cafe`; it is retained as a candidate
-artifact and is not evidence of 33-leaf real-photo accuracy.
+UECFood 식사 specialist는 class balancing을 sampler와 loss에 중복 적용하던
+문제를 제거한 뒤 MPS에서 2 epoch 재학습했다. 고정 4,249장 검증셋에서
+Top-1 98.05%, Top-3 100%를 기록했다.
 
-Observability is available through protected `GET /metrics`, response headers
-`X-Request-ID` and `X-Process-Time-Ms`, `logs/model-api.jsonl`, MLflow experiment
-`cashlog33-mps-specialists`, and per-run `progress.json`/`training.jsonl` files.
+이 수치의 범위는 `meal_dining`과 `meal_cafe`뿐이며 33-leaf 실제 사진 정확도의
+증거가 아니다.
 
-## 13. Public Path Latency Remediation (2026-07-17)
+관측 가능 위치:
 
-The model worker was not the main source of the multi-second app delay. A repeated
-2.65 MiB PNG request through the original Vercel `iad1` function and Quick Tunnel
-took 5.30 to 6.32 seconds, while the same image on the local MPS worker took about
-0.35 seconds. A direct authenticated Quick Tunnel request took 0.74 to 1.12 seconds.
+- 인증이 필요한 `GET /metrics`
+- 응답 헤더 `X-Request-ID`, `X-Process-Time-Ms`
+- `logs/model-api.jsonl`
+- MLflow 실험 `cashlog33-mps-specialists`
+- 실행별 `progress.json`, `training.jsonl`
 
-CashLog now runs only the analyzer and analyzer-status functions in Vercel `icn1`,
-re-encodes large upstream images to a maximum 960px JPEG, and performs the same
-best-effort reduction in the browser before upload. The server keeps the validated
-original when optimization is unavailable or does not reduce size. The 2.65 MiB
-canary was reduced to about 138 KiB before the Galaxy hop without changing its
-`meal_cafe` result.
+## 13. 공개 경로 지연 개선 (2026-07-17)
 
-| Public measurement | Before | After |
+수 초가 걸리던 앱 요청의 주된 원인은 모델 worker가 아니었다. 원본 Vercel
+`iad1` 함수와 Quick Tunnel을 거친 2.65 MiB PNG 요청은 5.30~6.32초가
+걸렸지만 같은 이미지를 로컬 MPS worker에서 처리하면 약 0.35초였다.
+인증된 Quick Tunnel 직접 요청은 0.74~1.12초였다.
+
+적용한 개선:
+
+- analyzer와 analyzer-status 함수만 Vercel `icn1`에서 실행
+- 큰 이미지를 upstream 전송 전에 최대 960px JPEG로 재인코딩
+- 브라우저에서도 업로드 전 동일한 best-effort 축소 수행
+- 최적화 실패 또는 크기 감소가 없으면 검증된 원본 유지
+
+2.65 MiB canary는 Galaxy 전송 전에 약 138 KiB로 줄었고 `meal_cafe`
+결과는 유지됐다.
+
+| 공개 경로 측정 | 적용 전 | 적용 후 |
 |---|---:|---:|
-| Original 2.65 MiB request, browser optimization bypassed | 5.30-6.32s | 2.98-4.10s |
-| Pre-compressed 424 KiB request | 3.30-3.54s on `iad1` | 1.71-2.15s on `icn1` |
-| Final 960px / 138 KiB client-sized request | not available | 0.94-1.12s |
-| Model stage inside measured requests | not correlated | 0.34-0.59s |
+| 원본 2.65 MiB, 브라우저 최적화 우회 | 5.30~6.32초 | 2.98~4.10초 |
+| 사전 압축 424 KiB | `iad1` 3.30~3.54초 | `icn1` 1.71~2.15초 |
+| 최종 960px / 138 KiB 요청 | 측정 없음 | 0.94~1.12초 |
+| 측정 요청 내부 모델 단계 | 상관관계 없음 | 0.34~0.59초 |
 
-The deployed client bundle contains the browser-side compressor. Vercel responses
-include `X-Cashlog-Read-Time-Ms`, `X-Cashlog-Optimize-Time-Ms`,
-`X-Cashlog-Analyzer-Time-Ms`, `X-Cashlog-Total-Time-Ms`, byte counts, and the same
-`X-Request-ID` forwarded through Galaxy to `logs/model-api.jsonl`. Vercel also emits
-an `image_analysis_completed` JSON event without image, OCR, or secret contents.
+배포된 client bundle에는 브라우저 이미지 압축기가 포함된다. Vercel 응답은
+다음 정보를 반환한다.
 
-These results validate the current test route only. The ephemeral Quick Tunnel
-still must be replaced by a named, policy-controlled tunnel before production.
-## 2026-07-17 - Consent-based feedback collection
+- `X-Cashlog-Read-Time-Ms`
+- `X-Cashlog-Optimize-Time-Ms`
+- `X-Cashlog-Analyzer-Time-Ms`
+- `X-Cashlog-Total-Time-Ms`
+- 입력 및 출력 byte 수
+- Galaxy를 거쳐 `logs/model-api.jsonl`까지 전달되는 `X-Request-ID`
 
-- Added versioned confirmation events for accepted Top-1, alternate Top-3, and manual leaf edits.
-- Added separate opt-in image-retention consent in CashLog; ordinary photo storage is not treated as training consent.
-- Added Supabase pending-only client RLS, event idempotency, review state, model/taxonomy, Top-3, and private image reference fields.
-- Added HMAC de-identification, duplicate/path validation, quarantine, active-learning priority scoring, 33-leaf readiness gates, and restricted image indexes.
-- Added daily Airflow curation and MLflow metrics/artifacts. Automatic training from user feedback remains disabled until a reviewed release is explicitly approved.
+Vercel은 이미지, OCR 원문, secret을 포함하지 않는
+`image_analysis_completed` JSON 이벤트도 기록한다.
 
-## 2026-07-18 - Pre-deployment hard-example labeling
+이 결과는 현재 테스트 경로만 검증한다. 임시 Quick Tunnel은 운영 전에 이름과
+정책이 고정된 tunnel로 교체해야 한다.
 
-- Added a loopback-only 33-leaf labeling server at `http://127.0.0.1:8011`.
-- Added server-side, atomic label decisions with revision checks and an append-only audit log.
-- Added confirm, correct, reject, filter, search, and current-model Top-3 inspection flows.
-- Added a queue builder that reuses the trained vision head and embedding cache instead of rerunning image inference.
-- Current trained-head queue: 411 samples, 36 Top-1 mismatches, 330 uncertain samples, and 45 confident matches.
-- Human-reviewed error-mining rows are locked to `train`; they cannot establish deployment accuracy.
-- Verified 26 Python tests, Python bytecode compilation, JavaScript syntax, loopback/API security, and desktop/mobile layouts.
+## 14. 동의 기반 피드백 수집 (2026-07-17)
 
-## 2026-07-23 - Isolated actual-data labeling
+- Top-1 승인, Top-3 대안 선택, 수동 leaf 수정 이벤트에 버전을 기록하도록 구현
+- CashLog에 별도의 이미지 보관 동의 추가
+- 일반 사진 저장을 학습 동의로 간주하지 않도록 분리
+- Supabase client RLS를 `pending` 입력 전용으로 제한
+- 이벤트 멱등성, 검토 상태, 모델·분류체계 버전, Top 3, private 이미지 참조 저장
+- HMAC 비식별화, 중복 및 경로 검증, quarantine 구현
+- active-learning 우선순위 점수와 33-leaf 준비도 게이트 구현
+- 제한된 이미지 index와 일일 Airflow 정제 작업 추가
+- 사람이 검토한 release가 승인되기 전까지 사용자 피드백 기반 자동 학습 비활성화
 
-- Added `data/raw/cashlog33/actual` as the private destination for consented
-  CashLog images; it is separate from all public, proxy, and synthetic sources.
-- Added an idempotent importer for restricted feedback releases. It blocks path
-  traversal, strips EXIF/GPS by image re-encoding, uses SHA-256 filenames,
-  de-identifies sample IDs, and writes files/directories as `0600`/`0700`.
-- Local mirror imports remove the source only after the image and manifest are
-  durably committed. Supabase imports never delete remote originals.
-- Added an Airflow `materialize_actual_dataset` task after feedback export.
-  Rejected or nonconsented images cannot enter its secure source index.
-- Added `predeploy_labeler --actual` on loopback port `8012`, with a separate
-  unreviewed queue and output directory
-  `data/processed/cashlog33/actual_review/v1`.
-- Actual samples remain ineligible for training until a human confirms or
-  corrects their 33-leaf label. Approved actual rows are locked to `train`;
-  deployment accuracy still requires a separate untouched holdout.
+## 15. 최초 배포 전 어려운 샘플 라벨링 (2026-07-18)
 
-## 2026-07-26 - Actual-label incremental retraining
+- `http://127.0.0.1:8011`에 loopback 전용 33-leaf 라벨링 서버 추가
+- revision 검사와 append-only 감사 로그를 포함한 원자적 라벨 결정 저장
+- 확정, 수정, 거절, 필터, 검색, 현재 모델 Top 3 확인 기능 추가
+- 이미지 추론을 반복하지 않고 기존 시각 헤드와 embedding cache를 재사용하는
+  queue builder 추가
+- 당시 queue: 총 411장, Top-1 불일치 36장, 불확실 330장, 확신 일치 45장
+- 사람이 검토한 오류 탐색 데이터는 `train`에만 고정
+- 해당 데이터는 배포 정확도의 근거로 사용하지 않음
+- Python 테스트 26개, bytecode compile, JavaScript 문법, loopback/API 보안,
+  desktop/mobile 레이아웃 검증 완료
 
-- Exported 2 human-approved actual rows, both `meal_dining`, as train-locked
-  inputs. No actual image, OCR text, identifier, or prediction file was committed.
-- Reused the frozen Open Images embedding cache and encoded 8 augmented actual
-  views with SigLIP2 on MPS in 7.50 seconds.
-- Trained candidate `cashlog33-hybrid-actual-v1-candidate`; MLflow experiment 3,
-  run `ea44469a8f67442cbc214e9ca380d8d7`.
-- The untouched 62-row validation and 82-row test metrics were exactly unchanged:
-  validation Top-1 75.81%, Top-3 96.77%, macro-F1 72.60%; test Top-1 79.27%,
-  Top-3 93.90%, macro-F1 80.94%.
-- On the fixed 99-row synthetic E2E set, both serving and candidate models scored
-  Top-1 98.99%, Top-3 98.99%, and macro-F1 98.96%. Candidate p50/p95 latency was
-  243/292ms versus 238/262ms for the serving model in these single warm runs.
-- On the two training examples, fit improved from 1/2 to 2/2 and repaired the
-  observed `transit_car` to `meal_dining` error. This is not holdout evidence
-  because both examples were used for training.
-- Promotion decision: **keep `cashlog33-hybrid-v1.1-fast` serving**. The candidate
-  fixed the known training example but did not improve any untouched accuracy
-  metric, so `configs/cashlog/hybrid.serving.json` and its pinned hash were not
-  changed.
+## 16. 실제 데이터 격리 라벨링 및 증분 학습
 
-## 2026-07-27 - Full merged-dataset retraining correction
+### 16.1 실제 데이터 격리 라벨링 (2026-07-23)
 
-- Replaced the implicit embedding append workflow with an explicit, versioned
-  merged dataset. It contains all 411 existing Open Images rows plus 2 reviewed
-  actual rows: 413 total, split into train 269 / validation 62 / test 82.
-- Preserved every original split from
-  `checkpoints/cashlog33/vision_head_v1/split_manifest.jsonl`. Both actual rows
-  remain human-approved and locked to train.
-- The merged manifest SHA-256 is
-  `40e4213cea8eaaac58cf445de7a5554b2641d1def717a2b2a12721ecb9ff83a5`.
-  Its versioned location is
-  `data/processed/cashlog33/training/incremental_v1/manifest.jsonl`.
-- Re-embedded the full merged dataset on MPS without the old embedding cache:
-  1,076 augmented train views, 62 validation images, and 82 test images in
-  34.88 seconds.
-- MLflow run `c1e9f769ca6449758da120512e013e4a` records candidate
-  `cashlog33-vision-head-merged-v1`.
-- Validation remained Top-1 75.81%, Top-3 96.77%, macro-F1 72.60%; test remained
-  Top-1 79.27%, Top-3 93.90%, macro-F1 80.94%.
-- The 99-row synthetic E2E result also remained Top-1 98.99%, Top-3 98.99%, and
-  macro-F1 98.96%. The two reviewed training rows scored 2/2.
-- Promotion decision remains **no replacement**: the candidate learned the known
-  rows but did not improve an untouched metric. The current serving config is
-  unchanged.
+- 동의받은 CashLog 이미지의 private 목적지로 `data/raw/cashlog33/actual` 추가
+- 공개, 프록시, 합성 소스와 실제 데이터 분리
+- 제한된 feedback release를 위한 멱등 importer 추가
+- 경로 탈출 차단
+- 이미지 재인코딩으로 EXIF 및 GPS 제거
+- SHA-256 파일명과 비식별 sample ID 사용
+- 파일 mode `0600`, 디렉터리 mode `0700`
+- 로컬 mirror는 이미지와 manifest가 안전하게 반영된 뒤에만 원본 제거
+- Supabase import는 원격 원본을 자동 삭제하지 않음
+- feedback export 다음에 Airflow `materialize_actual_dataset` 작업 실행
+- 거절되거나 동의받지 않은 이미지는 secure source index에 진입 불가
+- `predeploy_labeler --actual`을 loopback 포트 `8012`에 추가
+- 실제 데이터 전용 미검토 queue와
+  `data/processed/cashlog33/actual_review/v1` 출력 사용
+- 사람이 33-leaf 라벨을 확인하거나 수정하기 전까지 학습 대상에서 제외
+- 승인된 실제 데이터는 `train`에만 고정
+- 배포 정확도 평가는 별도의 미사용 holdout으로 수행
 
-## 2026-07-27 - Uncapped all-data MPS retraining
+### 16.2 실제 라벨 2건 증분 학습 (2026-07-26)
 
-- Removed the text source cap and consumed all 60,000 expense-mappable source rows
-  plus all 15,840 generated rows. The remaining 8,000 source rows describe income
-  or transfers and have no valid target in the 33 expense leaves.
-- Built a 75,840-row text manifest: 59,685 train, 8,067 validation, and 8,088
-  test. MLflow run `7f6249fb766141de8c9487c8aacfd9d6` reached test Top-1
-  `0.9984`, Top-3 `1.0000`, and macro-F1 `0.9983`.
-- Built the general visual manifest from all 411 Open Images rows, all 61
-  license-checked weak Openverse rows, and both approved actual rows: 474 source
-  images. Weak rows are train-only; the fixed 62/82 proxy validation/test images
-  remain untouched.
-- MPS encoded all 1,320 augmented training views plus all validation/test images.
-  MLflow run `de2293b95dc748c1881b84af6becdab0` reached test Top-1 `0.8049`,
-  Top-3 `0.9390`, and macro-F1 `0.7903`. Top-1 improved over `0.7927`, while
-  macro-F1 declined from `0.8094`; this proxy head was therefore required to pass
-  the full hybrid regression gate before selection.
-- Auditing the UECFood override found that substring matching treated `tea` as a
-  match inside `steak` and `steamed`, and ingredient words incorrectly fabricated
-  grocery labels from prepared dishes. Those runs were rejected. Overrides now use
-  word-boundary matching and only map prepared-food dining/cafe semantics.
-- The corrected mapping consumes all 31,395 UECFood images: 29,002 dining and
-  2,393 cafe, with 26,686 train and 4,709 deterministic validation images. Existing
-  specialist baseline run `ba17031e68274ec0a56357e78a4e05bd` scored Top-1
-  `0.9620` and minimum leaf recall `0.9610`.
-- The all-data MPS fine-tune consumed the complete train split in one epoch.
-  MLflow runs `c4bcdab3b4db411e96f03227409bfc65` and
-  `48ecc29e0a5d442cbddc3ab233efbe2e` scored Top-1 `0.9565` and minimum
-  leaf recall `0.9443`. It passed the 95% gate but regressed, so it was not
-  selected over the stronger existing specialist.
-- On the fixed 99-receipt synthetic integration set, serving baseline run
-  `a639c571ae6242cc8e75a698208a2a42` and all-data candidate run
-  `d4fbefd6292443c2989be88cb70d0853` both scored Top-1/Top-3 `0.9899`
-  and macro-F1 `0.9896`. Candidate p95 latency was `256.7ms` versus `274.6ms`.
-- Promotion decision: select `cashlog33-all-data-mps-v1` with the all-data
-  visual/text heads and the stronger existing meal specialist. Keep
-  `allow_auto_confirm=false`; these proxy and synthetic results do not establish
-  95% accuracy on a frozen real CashLog photo holdout.
-- Restarted the loopback-only macOS LaunchAgent. `/health` reports MPS, the selected
-  model version, and loaded/warmed artifacts. An authenticated multipart grocery
-  fixture returned `meal_grocery`, the selected model version, and the full
-  `siglip2+mobilenetv4+rapidocr+tfidf` member contract.
+- 사람이 승인한 실제 데이터 2건을 모두 `meal_dining`으로 export
+- 실제 이미지, OCR 텍스트, identifier, prediction 파일은 Git에 커밋하지 않음
+- 고정 Open Images embedding cache를 재사용
+- 실제 이미지의 증강 view 8개를 SigLIP2 MPS에서 7.50초에 인코딩
+- 후보 `cashlog33-hybrid-actual-v1-candidate` 학습
+- MLflow experiment 3, run `ea44469a8f67442cbc214e9ca380d8d7`
+
+고정 검증 및 테스트 결과는 기존과 같았다.
+
+| 범위 | Top-1 | Top-3 | Macro F1 |
+|---|---:|---:|---:|
+| 검증 62장 | 75.81% | 96.77% | 72.60% |
+| 테스트 82장 | 79.27% | 93.90% | 80.94% |
+| 합성 E2E 99장 | 98.99% | 98.99% | 98.96% |
+
+한 번의 warm 실행에서 후보 p50/p95는 243/292ms, 기존 서빙 모델은
+238/262ms였다.
+
+학습에 사용한 실제 데이터 2건의 fit은 1/2에서 2/2로 개선됐고,
+`transit_car`에서 `meal_dining`으로 잘못 분류하던 사례가 수정됐다.
+하지만 두 데이터 모두 학습에 사용했기 때문에 holdout 근거가 아니다.
+
+결정: 실제 학습 예시는 수정했지만 미사용 정확도 지표가 개선되지 않았으므로
+당시 서빙 모델 `cashlog33-hybrid-v1.1-fast`를 유지했다.
+
+### 16.3 전체 병합 데이터셋 재학습 수정 (2026-07-27)
+
+기존 embedding append 방식 대신 명시적이고 버전이 고정된 병합 데이터셋을
+만들었다.
+
+- Open Images 411장
+- 사람이 검토한 실제 데이터 2장
+- 총 413장
+- 학습 269장, 검증 62장, 테스트 82장
+
+`checkpoints/cashlog33/vision_head_v1/split_manifest.jsonl`의 기존 split을
+그대로 유지했다. 실제 데이터 2건은 모두 사람 승인 상태이며 `train`에 고정했다.
+
+- 병합 manifest SHA-256:
+  `40e4213cea8eaaac58cf445de7a5554b2641d1def717a2b2a12721ecb9ff83a5`
+- 위치:
+  `data/processed/cashlog33/training/incremental_v1/manifest.jsonl`
+- MPS 인코딩: 증강 학습 view 1,076개, 검증 62장, 테스트 82장
+- 소요 시간: 34.88초
+- MLflow run: `c1e9f769ca6449758da120512e013e4a`
+- 후보: `cashlog33-vision-head-merged-v1`
+
+검증 Top-1 75.81%, Top-3 96.77%, macro-F1 72.60%와 테스트 Top-1
+79.27%, Top-3 93.90%, macro-F1 80.94%는 기존과 같았다.
+합성 E2E 99장도 Top-1 98.99%, Top-3 98.99%, macro-F1 98.96%로 같았고,
+실제 학습 데이터 2건은 2/2를 기록했다.
+
+결정: 알려진 학습 예시는 학습했지만 미사용 지표가 개선되지 않아 이 시점에는
+서빙 모델을 교체하지 않았다.
+
+## 17. 제한 없는 전체 데이터 MPS 재학습 (2026-07-27)
+
+### 17.1 사용 데이터
+
+텍스트 소스의 임의 상한을 제거했다.
+
+- 지출 leaf에 매핑 가능한 원본 60,000건 전체 사용
+- 프로젝트 생성 텍스트 15,840건 전체 사용
+- 총 75,840건
+- 학습 59,685건
+- 검증 8,067건
+- 테스트 8,088건
+- 원본의 나머지 8,000건은 수입 또는 이체 데이터로, 지출 전용 33개 leaf에
+  유효한 정답이 없어 제외
+
+일반 시각 manifest:
+
+- Open Images 411장 전체
+- 라이선스를 확인한 약한 Openverse 데이터 61장 전체
+- 사람이 승인한 실제 데이터 2장 전체
+- 원본 이미지 총 474장
+- 약한 라벨은 `train` 전용
+- 고정 프록시 검증 62장과 테스트 82장은 변경하지 않음
+
+UECFood specialist:
+
+- 전체 31,395장
+- `meal_dining` 29,002장
+- `meal_cafe` 2,393장
+- 학습 26,686장
+- 결정적 검증 4,709장
+- per-class sample cap 없음
+- balanced sampler를 사용하지 않아 한 epoch에 전체 학습 split을 순회
+
+학습 가능한 전체 이미지 수는 31,869장이다.
+
+### 17.2 텍스트 모델 결과
+
+- manifest: 75,840건
+- MLflow run: `7f6249fb766141de8c9487c8aacfd9d6`
+- 테스트 Top-1: `0.9984`
+- 테스트 Top-3: `1.0000`
+- 테스트 macro-F1: `0.9983`
+
+TF-IDF와 SGD는 PyTorch 연산이 아니므로 MPS 대상이 아니다. 해당 학습은 CPU에서
+수행하며, 이미지 임베딩과 specialist 학습에 MPS를 사용한다.
+
+### 17.3 일반 시각 헤드 결과
+
+MPS에서 증강 학습 view 1,320개와 검증·테스트 이미지 전체를 인코딩했다.
+
+- MLflow run: `de2293b95dc748c1881b84af6becdab0`
+- 테스트 Top-1: `0.8049`
+- 테스트 Top-3: `0.9390`
+- 테스트 macro-F1: `0.7903`
+
+기존 Top-1 `0.7927`보다 개선됐지만 macro-F1은 `0.8094`에서 낮아졌다.
+따라서 단독 지표만으로 승격하지 않고 전체 하이브리드 회귀 게이트를 추가로
+적용했다.
+
+### 17.4 UECFood 라벨 오류 발견 및 수정
+
+기존 override의 부분 문자열 비교에서 `tea`가 `steak`, `steamed` 내부에도
+일치했다. 그 결과 793장이 `meal_drink`로 잘못 매핑됐다. 또한 egg,
+vegetable, tofu 같은 식재료 단어를 사용해 조리된 음식 2,276장을
+`meal_grocery`로 잘못 만든 문제가 있었다.
+
+해당 4-class 실험은 전부 폐기했다.
+
+수정 사항:
+
+- keyword에 정규식 단어 경계 적용
+- UECFood 범위를 prepared food로 명시
+- UECFood에서는 신뢰할 수 있는 dining/cafe 의미만 학습
+- grocery/drink는 일반 시각, OCR, 텍스트 헤드가 담당
+
+### 17.5 식사 specialist 비교
+
+수정된 동일 검증셋에서 기존 checkpoint를 먼저 재평가했다.
+
+- MLflow baseline run: `ba17031e68274ec0a56357e78a4e05bd`
+- Top-1: `0.9620`
+- Top-3: `1.0000`
+- Macro F1: `0.8865`
+- 최소 leaf recall: `0.9610`
+
+전체 26,686장 학습 split을 MPS에서 한 epoch 모두 순회한 미세조정 후보:
+
+- 학습 run: `c4bcdab3b4db411e96f03227409bfc65`
+- 평가 run: `48ecc29e0a5d442cbddc3ab233efbe2e`
+- Top-1: `0.9565`
+- Top-3: `1.0000`
+- Macro F1: `0.8719`
+- 최소 leaf recall: `0.9443`
+
+전체 데이터 후보는 95% 게이트를 통과했지만 기존 checkpoint보다 낮았다.
+따라서 전체 데이터 학습 산출물은 보존하되 서빙에는 기존 96.20% specialist를
+선택했다.
+
+### 17.6 통합 회귀 평가 및 최종 선택
+
+고정 합성 영수증 99장 평가:
+
+| 모델 | MLflow run | Top-1 | Top-3 | Macro F1 | p95 |
+|---|---|---:|---:|---:|---:|
+| 기존 서빙 baseline | `a639c571ae6242cc8e75a698208a2a42` | 0.9899 | 0.9899 | 0.9896 | 274.6ms |
+| 전체 데이터 후보 | `d4fbefd6292443c2989be88cb70d0853` | 0.9899 | 0.9899 | 0.9896 | 256.7ms |
+
+최종 선택:
+
+- 모델 버전: `cashlog33-all-data-mps-v1`
+- 시각 헤드: 전체 474장 기반 모델
+- 텍스트 헤드: 전체 75,840건 기반 모델
+- 식사 specialist: 수정 검증셋에서 더 강한 기존 96.20% checkpoint
+- `allow_auto_confirm=false`
+
+합성·프록시 결과는 동결된 실제 CashLog 사진에서 95% 정확도를 입증하지 않는다.
+
+### 17.7 서빙 검증
+
+loopback 전용 macOS LaunchAgent를 새 설정으로 재시작했다.
+
+`/health` 확인 결과:
+
+- `status=ok`
+- `model_device=mps`
+- `model_loaded=true`
+- `model_version=cashlog33-all-data-mps-v1`
+
+인증된 multipart 식재료 fixture 추론 결과:
+
+- 정답 및 추천: `meal_grocery`
+- 모델: `cashlog33-all-data-mps-v1`
+- 엔진: `siglip2+mobilenetv4+rapidocr+tfidf`
+- `need_user_check=true`
+
+전체 Python 테스트는 48개가 통과했고, 2개 subtest도 통과했다.
+Python bytecode compile, shell 문법 검사, `git diff --check`도 통과했다.
