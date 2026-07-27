@@ -34,6 +34,7 @@ Primary records:
 - `ml_docs/CASHLOG33_MODEL_DESIGN.md`
 - `ml_docs/CASHLOG33_DATA_CARD.md`
 - `ml_docs/CASHLOG33_OPERATIONS.md`
+- `ml_docs/CASHLOG33_OCR_DATA_EXPANSION.md`
 - `ml_docs/CASHLOG33_PREDEPLOY_LABELING.md`
 - `ml_docs/CASHLOG33_RUN_LOG.md`
 - `reports/cashlog33/model_report/index.html`
@@ -74,6 +75,32 @@ Text generation is explicitly uncapped:
   --max-source-per-leaf 0 \
   --synthetic-per-leaf 480
 ```
+
+## OCR and 33-leaf image expansion (2026-07-27)
+
+The OCR/category dataset is also uncapped by source sampling and is generated as a
+versioned, deterministic artifact:
+
+```bash
+.venv/bin/python scripts/launch_training.py cashlog_ocr_category_112k
+tail -f logs/cashlog_ocr_category_112k.log
+```
+
+It produces 105,600 balanced 33-leaf full-page training images, 120,000 OCR
+recognition training crops, and imports 800 CORD training receipts through a pinned
+Hugging Face API revision. Airflow verifies counts, source hashes, unique image
+hashes, OCR box bounds, split coverage, and the CORD OCR-only policy before composing
+a candidate.
+
+The bounded Product Opener API pass downloaded 391 licensed product images for
+grocery, beverage, beauty, and pet leaves. Cross-leaf SHA-256 conflict filtering
+accepted 389 weak, train-only labels. The resulting MPS candidate improved the frozen
+proxy test Top-1 from `0.8049` to `0.8293`, but validation Top-1 fell from `0.7742`
+to `0.7581`; it is retained in MLflow and is not automatically promoted.
+
+The current RapidOCR baseline measured CER `0.1422` and OCR-text category Top-1
+`0.9091` on 99 synthetic validation pages. These metrics justify OCR fine-tuning but
+are not real-receipt accuracy. See `ml_docs/CASHLOG33_OCR_DATA_EXPANSION.md`.
 
 ## Pre-deployment error review
 

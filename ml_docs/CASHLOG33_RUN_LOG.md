@@ -652,3 +652,76 @@ loopback 전용 macOS LaunchAgent를 새 설정으로 재시작했다.
 
 전체 Python 테스트는 48개가 통과했고, 2개 subtest도 통과했다.
 Python bytecode compile, shell 문법 검사, `git diff --check`도 통과했다.
+
+## 18. OCR 및 33개 leaf 데이터 10만 장 확장
+
+### 18.1 수집 원칙
+
+대규모 무단 스크래핑 대신 공식 API와 공식 bulk 경로를 우선했다.
+
+- CORD v2: 고정 revision의 Hugging Face Hub API로 1,000장 수집
+- Product Opener: Open Food/Beauty/Pet Food Facts API로 391장 수집
+- Open Food Facts 대량 확장: product export 및 AWS image/OCR bucket 사용
+- CashLog 합성 데이터: versioned text manifest에서 결정적으로 생성
+- CORD의 인도네시아 domain label은 CashLog 카테고리 정답으로 사용하지 않음
+- Product Opener product type은 약한 라벨이며 train-only
+
+### 18.2 생성 및 검증 결과
+
+- 33-leaf 합성 full-page: 112,200장
+- 학습 full-page: 105,600장, leaf별 정확히 3,200장
+- 합성 OCR line box: 999,194개
+- CORD: 1,000장, OCR word box 23,912개
+- OCR recognition crop: 130,000장, 학습 120,000장
+- 전체 생성·수집 이미지 파일: 243,200장
+- 고유 full-page 합성 해시: 112,200개
+- 누락 파일, split 누수, box 범위 오류: 0
+
+검증 보고서:
+
+- `reports/cashlog33/data/ocr_category_v1_validation.json`
+- `reports/cashlog33/data/ocr_category_v1_ocr_metrics.json`
+
+### 18.3 RapidOCR 기준선
+
+합성 검증 99장에 현재 서빙 OCR을 실행했다.
+
+- MLflow run: `fcba681fbc3f47c8bf039082fd3feb20`
+- CER: `0.1422`
+- 완전 일치율: `0.1313`
+- OCR 텍스트 기반 33-leaf Top-1: `0.9091`
+- p50: `0.2461초`
+- p95: `0.2985초`
+
+이는 새 OCR 학습 데이터의 난이도를 측정한 기준선이다. 새 OCR checkpoint가
+아직 기존 모델보다 낫다는 뜻은 아니므로 RapidOCR 모델은 교체하지 않았다.
+
+### 18.4 상품 API 통합 학습
+
+Product Opener API 수집 391장 중 동일 이미지가 서로 다른 leaf에 걸린 2개
+row를 SHA-256 기준으로 제외했다. 최종 389장은 학습 전용 약한 라벨이다.
+
+- 통합 manifest: 863장
+- train/validation/test: 719/62/82
+- MPS embedding 및 선형 헤드 학습: 59.51초
+- MLflow run: `af0c36f69862457daf64831dce6c93b2`
+
+기존 모델 대비 고정 proxy test 결과:
+
+- Top-1: `0.8049 → 0.8293`
+- Top-3: `0.9390 → 0.9512`
+- Macro-F1: `0.7903 → 0.8067`
+
+고정 validation은 Top-1 `0.7742 → 0.7581`, Macro-F1
+`0.7412 → 0.7253`으로 하락했다. 테스트 개선과 검증 회귀가 함께 있으므로
+후보 checkpoint와 MLflow 산출물은 보존하되 운영 모델 자동 교체는 보류했다.
+
+### 18.5 자동화
+
+- 로컬 실행 job: `cashlog_ocr_category_112k`
+- Airflow: CORD/API provenance 확인 → 생성 → 전수 검증 → OCR 기준선 평가
+- MLflow: OCR CER·지연·카테고리 지표와 후보 모델 artifact 저장
+- 오류 시 기존 승인 manifest와 운영 모델을 덮어쓰지 않음
+
+최종 검증에서 Python 테스트 53개와 subtest 2개가 통과했다. 새 Python 파일의
+bytecode compile, shell 문법 검사, `git diff --check`도 통과했다.

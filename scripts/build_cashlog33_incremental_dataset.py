@@ -162,25 +162,58 @@ def build_incremental_dataset(
             f"weak additional sample_id already exists in another dataset: {overlap[0]}"
         )
 
-    weak_train: list[dict[str, Any]] = []
-    allowed_weak_licenses = {"by", "cc0", "pdm"}
+    weak_ids_by_hash: dict[str, list[str]] = {}
     for sample_id, row in weak_by_id.items():
+        validate_image_hash(row)
+        weak_ids_by_hash.setdefault(str(row["sha256"]).lower(), []).append(sample_id)
+    ambiguous_weak_ids: set[str] = set()
+    duplicate_weak_ids: set[str] = set()
+    for sample_ids in weak_ids_by_hash.values():
+        if len(sample_ids) < 2:
+            continue
+        leaves = {str(weak_by_id[sample_id].get("leaf_id") or "") for sample_id in sample_ids}
+        if len(leaves) > 1:
+            ambiguous_weak_ids.update(sample_ids)
+        else:
+            duplicate_weak_ids.update(sorted(sample_ids)[1:])
+
+    weak_train: list[dict[str, Any]] = []
+    allowed_weak_sources = {
+        "openverse",
+        "openfoodfacts-grocery",
+        "openfoodfacts-beverages",
+        "openbeautyfacts",
+        "openpetfoodfacts",
+    }
+    allowed_weak_licenses = {"by", "cc0", "pdm", "cc-by-sa-3.0"}
+    for sample_id, row in weak_by_id.items():
+        if sample_id in ambiguous_weak_ids or sample_id in duplicate_weak_ids:
+            continue
         leaf_id = str(row.get("leaf_id") or "")
         if leaf_id not in allowed_leaves:
             raise ValueError(
                 f"weak additional sample {sample_id} uses an unknown taxonomy leaf"
             )
-        if str(row.get("source") or "") != "openverse":
+        source = str(row.get("source") or "")
+        if source not in allowed_weak_sources:
             raise ValueError(
-                f"weak additional sample {sample_id} is not from Openverse"
+                f"weak additional sample {sample_id} has an unsupported source"
             )
-        if str(row.get("status") or "") != "accepted":
+        if source == "openverse" and str(row.get("status") or "") != "accepted":
             raise ValueError(
                 f"weak additional sample {sample_id} was not accepted by collection"
             )
         if str(row.get("license") or "").casefold() not in allowed_weak_licenses:
             raise ValueError(
                 f"weak additional sample {sample_id} has an unsupported license"
+            )
+        if source != "openverse" and (
+            str(row.get("provenance_type") or "") != "api_product_image"
+            or str(row.get("review_status") or "") != "product_type_weak"
+            or str(row.get("status") or "accepted") != "accepted"
+        ):
+            raise ValueError(
+                f"weak product sample {sample_id} lacks API product provenance"
             )
         validate_image_hash(row)
         sha256 = str(row["sha256"]).lower()
@@ -196,7 +229,11 @@ def build_incremental_dataset(
                 "split": "train",
                 "split_lock": "train",
                 "review_status": "weak_label",
-                "label_method": "openverse_query_leaf_v1",
+                "label_method": (
+                    "openverse_query_leaf_v1"
+                    if source == "openverse"
+                    else "product_opener_product_type_v1"
+                ),
                 "weak_label": True,
             }
         )
@@ -226,6 +263,8 @@ def build_incremental_dataset(
         "base_rows": len(base_rows),
         "additional_train_rows": len(reviewed_train),
         "weak_additional_train_rows": len(weak_train),
+        "weak_ambiguous_rows_excluded": len(ambiguous_weak_ids),
+        "weak_duplicate_rows_excluded": len(duplicate_weak_ids),
         "merged_rows": len(merged_rows),
         "split_counts": dict(sorted(split_counts.items())),
         "source_counts": dict(sorted(source_counts.items())),

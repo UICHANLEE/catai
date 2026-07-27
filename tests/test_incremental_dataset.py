@@ -31,6 +31,9 @@ class IncrementalDatasetTests(unittest.TestCase):
         self.assertIn("--max-source-per-leaf 0", source)
         self.assertIn("--class-weight none", source)
         self.assertIn('task_id="validate_mps_meal_specialist"', source)
+        self.assertIn('task_id="validate_ocr_category_dataset"', source)
+        self.assertIn('task_id="evaluate_ocr_baseline"', source)
+        self.assertIn("open_products_api/manifest.jsonl", source)
         self.assertIn("--meal-specialist-checkpoint", source)
 
     def test_merges_reviewed_rows_into_train_and_preserves_base_splits(self) -> None:
@@ -175,6 +178,96 @@ class IncrementalDatasetTests(unittest.TestCase):
         self.assertEqual("train", rows[0]["split_lock"])
         self.assertEqual("weak_label", rows[0]["review_status"])
         self.assertTrue(rows[0]["weak_label"])
+
+    def test_marks_product_opener_rows_as_weak_train_only_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "product.jpg"
+            image.write_bytes(b"product-image")
+            base_manifest = root / "base.jsonl"
+            base_splits = root / "splits.jsonl"
+            weak_manifest = root / "product.jsonl"
+            write_jsonl(base_manifest, [])
+            write_jsonl(base_splits, [])
+            write_jsonl(
+                weak_manifest,
+                [
+                    {
+                        "sample_id": "openbeautyfacts:1",
+                        "leaf_id": "fashion_beauty",
+                        "relative_path": str(image),
+                        "sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+                        "source": "openbeautyfacts",
+                        "status": "accepted",
+                        "license": "cc-by-sa-3.0",
+                        "provenance_type": "api_product_image",
+                        "review_status": "product_type_weak",
+                    }
+                ],
+            )
+
+            build_incremental_dataset(
+                base_manifest=base_manifest,
+                base_split_manifest=base_splits,
+                additional_manifests=[],
+                weak_additional_manifests=[weak_manifest],
+                categories_path=CATEGORIES,
+                output_dir=root / "output",
+            )
+            rows = [
+                json.loads(line)
+                for line in (root / "output/manifest.jsonl").read_text().splitlines()
+            ]
+
+        self.assertEqual("train", rows[0]["split"])
+        self.assertEqual("train", rows[0]["split_lock"])
+        self.assertTrue(rows[0]["weak_label"])
+        self.assertEqual(
+            "product_opener_product_type_v1", rows[0]["label_method"]
+        )
+
+    def test_excludes_cross_leaf_weak_image_duplicates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "ambiguous.jpg"
+            image.write_bytes(b"same-product-image")
+            image_hash = hashlib.sha256(image.read_bytes()).hexdigest()
+            base_manifest = root / "base.jsonl"
+            base_splits = root / "splits.jsonl"
+            weak_manifest = root / "weak.jsonl"
+            write_jsonl(base_manifest, [])
+            write_jsonl(base_splits, [])
+            write_jsonl(
+                weak_manifest,
+                [
+                    {
+                        "sample_id": f"openfoodfacts-{source}:1",
+                        "leaf_id": leaf_id,
+                        "relative_path": str(image),
+                        "sha256": image_hash,
+                        "source": f"openfoodfacts-{source}",
+                        "license": "cc-by-sa-3.0",
+                        "provenance_type": "api_product_image",
+                        "review_status": "product_type_weak",
+                    }
+                    for source, leaf_id in (
+                        ("grocery", "meal_grocery"),
+                        ("beverages", "meal_drink"),
+                    )
+                ],
+            )
+
+            summary = build_incremental_dataset(
+                base_manifest=base_manifest,
+                base_split_manifest=base_splits,
+                additional_manifests=[],
+                weak_additional_manifests=[weak_manifest],
+                categories_path=CATEGORIES,
+                output_dir=root / "output",
+            )
+
+        self.assertEqual(0, summary["merged_rows"])
+        self.assertEqual(2, summary["weak_ambiguous_rows_excluded"])
 
 
 if __name__ == "__main__":

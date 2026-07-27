@@ -77,16 +77,17 @@ The DAG `cashlog33_training_pipeline` executes:
 
 1. Validate source artifacts, model files, and the exact 33-label contract.
 2. Validate the completed native MPS dining/cafe specialist and its 95% target.
-3. Merge all 411 Open Images, 61 licensed weak Openverse, and available
+3. Validate the versioned 100k-plus OCR/category dataset, OCR boxes, and CORD policy.
+4. Merge all 411 Open Images, 61 licensed weak Openverse, and available
    human-approved actual rows.
-4. Rebuild all 60,000 mapped source text rows plus 15,840 generated rows.
-5. Re-score the visual proxy and train the SigLIP2 head from the merged manifest.
-6. Train and calibrate the text classifier.
-7. Build a checksum-pinned isolated candidate config containing all three learned
+5. Rebuild all 60,000 mapped source text rows plus 15,840 generated rows.
+6. Re-score the visual proxy and train the SigLIP2 head from the merged manifest.
+7. Train and calibrate the text classifier.
+8. Build a checksum-pinned isolated candidate config containing all three learned
    members.
-8. Generate deterministic Korean receipt fixtures.
-9. Evaluate hybrid E2E behavior and log artifacts to MLflow.
-10. Apply integration and production promotion gates.
+9. Generate deterministic Korean receipt fixtures.
+10. Evaluate hybrid E2E behavior and log artifacts to MLflow.
+11. Apply integration and production promotion gates.
 
 It writes candidates to `checkpoints/cashlog33/airflow_latest`, reports to
 `reports/cashlog33/airflow_latest`, and never modifies

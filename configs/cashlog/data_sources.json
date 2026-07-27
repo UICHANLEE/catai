@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-07-27",
+  "sources": [
+    {
+      "id": "cord_v2",
+      "purpose": ["ocr_detection", "ocr_recognition", "receipt_layout"],
+      "acquisition": "Hugging Face Hub API with pinned revision",
+      "repository": "Heliosoph/CORD",
+      "upstream": "naver-clova-ix/cord-v2",
+      "revision": "51b7e932f2a07a883d77487b34aa5a33f76fa713",
+      "license": "CC-BY-4.0",
+      "expected_images": 1000,
+      "cashlog_category_policy": "ocr_only",
+      "status": "enabled"
+    },
+    {
+      "id": "open_food_facts",
+      "purpose": ["product_ocr", "meal_grocery", "meal_drink"],
+      "acquisition": "Official bulk product export plus AWS Open Data 400px images and OCR JSON",
+      "api": "https://world.openfoodfacts.org/api/v3",
+      "bulk_images": "s3://openfoodfacts-images/data",
+      "license": "ODbL database; CC-BY-SA product images",
+      "cashlog_category_policy": "taxonomy_mapped_weak_train_only",
+      "status": "planned_bulk"
+    },
+    {
+      "id": "open_beauty_facts",
+      "purpose": ["product_ocr", "fashion_beauty"],
+      "acquisition": "Product Opener API or official product export",
+      "api": "https://world.openbeautyfacts.org/api/v3",
+      "license": "ODbL database; CC-BY-SA product images",
+      "cashlog_category_policy": "product_type_weak_train_only",
+      "status": "planned_bulk"
+    },
+    {
+      "id": "open_pet_food_facts",
+      "purpose": ["product_ocr", "family_pet"],
+      "acquisition": "Product Opener API or official product export",
+      "api": "https://world.openpetfoodfacts.org/api/v3",
+      "license": "ODbL database; CC-BY-SA product images",
+      "cashlog_category_policy": "product_type_weak_train_only",
+      "status": "planned_bulk"
+    },
+    {
+      "id": "cashlog_ocr_category_synthetic_v1",
+      "purpose": ["korean_ocr_detection", "korean_ocr_recognition", "cashlog_33_leaf"],
+      "acquisition": "Deterministic local rendering from the versioned CashLog text manifest",
+      "license": "project-generated",
+      "expected_images": 112200,
+      "expected_train_images": 105600,
+      "cashlog_category_policy": "deterministic_weak_train_and_synthetic_validation",
+      "status": "enabled"
+    }
+  ],
+  "excluded_sources": [
+    {
+      "id": "generic_web_scraping",
+      "reason": "Unknown copyright, consent, attribution, and label quality."
+    },
+    {
+      "id": "aihub_without_operator_credentials",
+      "reason": "Account approval and dataset-specific usage agreement are required."
+    }
+  ]
+}

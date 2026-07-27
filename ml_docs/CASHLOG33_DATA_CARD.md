@@ -18,9 +18,13 @@ other sensitive attributes.
 | CashLog text templates | Deterministic local generator | 15,840 rows | All 33 leaves | Project-generated; integration/training aid |
 | Open Images V7 validation | Google metadata files and image URLs | 411 images | 23 leaves | Annotations CC BY 4.0; selected images individually carry CC BY 2.0 metadata |
 | Openverse smoke collection | Openverse API | 61 images | 31 leaves | 55 CC BY, 4 CC0, 2 PDM; weak query labels, train-only |
+| Product Opener APIs | Open Food/Beauty/Pet Food Facts APIs | 391 images downloaded; 389 accepted | Grocery, beverage, beauty, pet | CC BY-SA 3.0 image metadata; product-type weak labels, train-only |
 | UECFood256 | Local downloaded archive and project override map | 31,395 images | `meal_dining`, `meal_cafe` | Research dataset; bundled README states no redistribution license, so data/model redistribution is not assumed |
 | CashLog actual | Consented import and manual labeling | 2 images | `meal_dining` | Private, human-approved, train-only |
 | CashLog receipt fixtures | Deterministic local renderer | 99 images | 3 per each of 33 leaves | Project-generated; E2E test only |
+| CashLog OCR/category synthetic v1 | Deterministic renderer from versioned text manifest | 112,200 full-page images | 3,400 per each of 33 leaves | Project-generated; synthetic training/validation only |
+| CashLog OCR recognition v1 | Deterministic line crops from synthetic OCR boxes | 130,000 crops | Korean/English receipt lines | Project-generated; PaddleOCR recognition format |
+| CORD v2 | Pinned Hugging Face Hub API download | 1,000 receipts | OCR word boxes and receipt layout | CC BY 4.0; OCR-only, never CashLog category truth |
 
 The all-data text build contains 75,840 rows: 59,685 train, 8,067 validation, and
 8,088 test. It keeps all 60,000 source rows that map to an expense leaf and all
@@ -29,11 +33,20 @@ income/transfer rows have no valid target in the expense-only 33-leaf taxonomy.
 Counts and provenance are regenerated in
 `data/processed/cashlog33/text/all_v1/quality_report.json`.
 
-The train-capable image inventory is 31,869 images: 31,395 UECFood images,
+The original visual inventory before the OCR expansion is 31,869 images:
+31,395 UECFood images,
 411 Open Images images, 61 Openverse images, and 2 actual images. These are not
 flattened into one misleading task. UECFood trains a prepared-food specialist;
 the other 474 images train the SigLIP2 33-leaf visual head. The specialist only
 redistributes probability already assigned to meal leaves.
+
+The OCR/category and product API expansion raises category-train-capable training
+inventory to 137,858 images by adding 105,600 balanced synthetic full-page training
+images and 389 accepted Product Opener images to the original 31,869 images.
+There are also 120,000 recognition training crops. CORD contributes 800 real photographed
+receipts to OCR training. Including validation/test files, the expansion contains
+113,200 full-page images and 130,000 line crops. Synthetic images and CORD's
+Indonesian domain labels do not enter the real-photo production holdout.
 
 The Open Images collector dropped 4,058 images whose source labels mapped to multiple
 CashLog leaves and recorded zero download failures. Ten leaves that cannot be
@@ -55,6 +68,13 @@ Openverse full expansion encountered anonymous `401` and `429` responses. All 61
 successfully downloaded and licensed smoke rows are retained as explicit weak
 train-only labels; they never enter validation or test. PD12M dataset index access
 returned server/index errors and supplied no local data to train.
+
+The bounded Product Opener collector encountered transient HTTP `503` responses and
+completed with retries and a resumable manifest rather than bypassing rate limits.
+It downloaded 391 images; SHA-256 grouping rejected two rows because the same product
+image mapped to different CashLog leaves. The resulting 389 weak labels are train-only.
+Future bulk expansion uses the official Open Food Facts product export and AWS Open
+Data image/OCR bucket, as required by the provider for bulk acquisition.
 
 ## Split and Leakage Policy
 
@@ -103,12 +123,14 @@ and does not write directly to Supabase. See `ml_docs/CASHLOG33_FEEDBACK_LOOP.md
 
 - No frozen real-photo holdout currently exists, so production accuracy is unknown.
 - Synthetic text accuracy is inflated by templates and broad label mappings.
-- The general visual head has 31 train leaves after weak Openverse additions, but its
-  frozen proxy holdout still covers only 23 leaves.
+- The general visual head has 31 train leaves after weak Openverse/Product Opener
+  additions, but its frozen proxy holdout still covers only 23 leaves.
 - UECFood contains prepared food but no trustworthy grocery or beverage expense
   labels. All images train the dining/cafe specialist.
 - Visual support is sparse for `health_gym` and `gift_event` in the current proxy.
 - OCR performance depends on blur, glare, crop, typography, and receipt language.
+- The current RapidOCR baseline has synthetic CER `0.1422`; the new OCR training
+  data is prepared, but a fine-tuned OCR model has not passed replacement gates yet.
 - Current confidence calibration fails the production ECE threshold on synthetic E2E.
 - Merchant and product distributions will drift after release.
 

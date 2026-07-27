@@ -23,6 +23,7 @@ RUNTIME_ENV = {
 
 TEXT_DIR = "data/processed/cashlog33/text/all_v1"
 VISUAL_DIR = "data/processed/cashlog33/training/all_v1"
+OCR_CATEGORY_DIR = "data/processed/cashlog33/ocr_category/v1"
 CANDIDATE_ROOT = "checkpoints/cashlog33/airflow_latest"
 CANDIDATE_CONFIG = "configs/cashlog/hybrid.airflow-candidate.json"
 CANDIDATE_REPORT = "reports/cashlog33/airflow_latest"
@@ -50,9 +51,11 @@ with DAG(
         test -f configs/cashlog/categories.json
         test -f configs/cashlog/leaf_semantics.json
         test -f configs/cashlog/ocr_lexicon.json
+        test -f configs/cashlog/data_sources.json
         test -f data/raw/cashlog33/text/us-bank-transactions-v2/transactions-synthetic.csv
         test -f data/raw/cashlog33/openimages_v7/manifest.jsonl
         test -f data/raw/cashlog33/openverse_smoke/manifest.jsonl
+        test -f data/raw/cashlog33/open_products_api/manifest.jsonl
         test -d data/processed/classification/uecfood256/UECFOOD256
         test -f checkpoints/cashlog33/vision_head_v1/split_manifest.jsonl
         test -f models/siglip2-base-patch16-224/model.safetensors
@@ -132,7 +135,49 @@ PY
             data/processed/cashlog33/actual_review/v1/training_manifest.jsonl \
           --weak-additional-train-manifest \
             data/raw/cashlog33/openverse_smoke/manifest.jsonl \
+          --weak-additional-train-manifest \
+            data/raw/cashlog33/open_products_api/manifest.jsonl \
           --output-dir {VISUAL_DIR}
+        """,
+    )
+
+    validate_ocr_category_dataset = BashOperator(
+        task_id="validate_ocr_category_dataset",
+        cwd="/workspace",
+        env=RUNTIME_ENV,
+        append_env=True,
+        execution_timeout=timedelta(minutes=30),
+        bash_command=f"""
+        set -euo pipefail
+        python scripts/validate_cashlog33_ocr_category_dataset.py \
+          --synthetic-dir {OCR_CATEGORY_DIR} \
+          --recognition-dir data/processed/cashlog33/ocr_recognition/v1 \
+          --cord-dir data/raw/cashlog33/cord_v2 \
+          --report reports/cashlog33/data/ocr_category_v1_validation.json \
+          --minimum-train-images 100000 \
+          --minimum-train-per-leaf 3000
+        """,
+    )
+
+    evaluate_ocr_baseline = BashOperator(
+        task_id="evaluate_ocr_baseline",
+        cwd="/workspace",
+        env=RUNTIME_ENV,
+        append_env=True,
+        execution_timeout=timedelta(minutes=30),
+        bash_command=f"""
+        set -euo pipefail
+        python scripts/evaluate_cashlog33_ocr_dataset.py \
+          --config configs/cashlog/hybrid.serving.json \
+          --manifest {OCR_CATEGORY_DIR}/manifest.jsonl \
+          --ocr-annotations {OCR_CATEGORY_DIR}/ocr_annotations.jsonl \
+          --output {CANDIDATE_REPORT}/ocr_data_metrics.json \
+          --split validation \
+          --per-leaf 3 \
+          --device cpu \
+          --mlflow-tracking-uri http://mlflow:5000 \
+          --mlflow-experiment cashlog33-ocr-data \
+          --mlflow-run-name cashlog33-airflow-ocr-baseline
         """,
     )
 
@@ -269,6 +314,13 @@ PY
         generate_e2e_fixtures,
     ]
     build_text_dataset >> train_text
+    build_text_dataset >> validate_ocr_category_dataset
+    validate_ocr_category_dataset >> evaluate_ocr_baseline
     [build_visual_dataset, score_visual_proxy] >> train_vision_head
-    [train_text, train_vision_head, validate_mps_meal_specialist] >> build_candidate_config
+    [
+        train_text,
+        train_vision_head,
+        validate_mps_meal_specialist,
+        evaluate_ocr_baseline,
+    ] >> build_candidate_config
     [build_candidate_config, generate_e2e_fixtures] >> evaluate_candidate >> select_candidate

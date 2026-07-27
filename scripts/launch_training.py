@@ -75,6 +75,10 @@ JOBS = {
         "bash",
         "scripts/train_cashlog33_all_data_mps.sh",
     ],
+    "cashlog_ocr_category_112k": [
+        "bash",
+        "scripts/build_cashlog33_ocr_dataset.sh",
+    ],
     "cashlog_leaf_uecfood_auto": [
         ".venv/bin/python",
         "scripts/train_cashlog_category_from_uecfood.py",
