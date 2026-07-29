@@ -127,6 +127,11 @@ See `ml_docs/CASHLOG33_500K_EXPANSION.md`.
 The complete source, licensing, augmentation probability, leakage, and I/O contract
 is documented in `ml_docs/CASHLOG33_DATA_PROVENANCE_AUGMENTATION.md`.
 
+The original-image expansion intentionally keeps synthetic counts separate from
+source photographs. Open Images is the frozen proxy split, ABO is train-only, and
+the candidate cannot be promoted without a manually labeled real-photo holdout.
+See `ml_docs/CASHLOG33_ORIGINAL_DATA_EXPANSION.md`.
+
 ## Pre-deployment error review
 
 Before the first deployment, inspect current-model mismatches against the scored

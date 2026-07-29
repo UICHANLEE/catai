@@ -312,6 +312,16 @@ def main() -> None:
         base_rows=rows,
         allowed_leaves=set(category_order),
     )
+    additional_manifest_metadata = [
+        {
+            "path": str(manifest),
+            "sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        }
+        for manifest in args.additional_train_manifest
+    ]
+    additional_source_counts = dict(
+        sorted(Counter(str(row.get("source") or "unknown") for row in additional_rows).items())
+    )
     splits = resolve_splits(rows, args.seed)
     train_leaves = {str(row["leaf_id"]) for row in splits["train"]}
     val_leaves = {str(row["leaf_id"]) for row in splits["val"]}
@@ -458,6 +468,7 @@ def main() -> None:
         "supported_leaves": trained_leaves,
         "vision_model_sha256": model_sha256,
         "training_manifest_sha256": training_manifest_sha256,
+        "additional_training_manifests": additional_manifest_metadata,
         "selected_c": selected_c,
         "class_weight": args.class_weight,
         "created_at": utc_now(),
@@ -480,6 +491,8 @@ def main() -> None:
         "train_augmented_samples": len(train_labels),
         "additional_train_rows": len(additional_rows),
         "additional_train_augmented_samples": len(additional_rows) * 4,
+        "additional_train_source_counts": additional_source_counts,
+        "additional_training_manifests": additional_manifest_metadata,
         "base_embedding_cache": str(args.base_embedding_cache) if args.base_embedding_cache else None,
         "embedding_seconds": embedding_seconds,
         "selected_c": selected_c,

@@ -906,3 +906,92 @@ LaunchAgent 재시작 후 검증:
 
 50만 장 후보는 실제 사진 동결 holdout과 운영자 검수를 통과하기 전까지 평가
 전용으로 유지한다.
+
+## 22. 실제 원본 데이터 확장과 MPS 재학습 (2026-07-29)
+
+### 22.1 원본 수집과 검증
+
+합성 렌더 수량이 아니라 서로 다른 실제 이미지 수를 늘렸다.
+
+- Open Images V7 validation human label: 17,983장
+- Amazon Berkeley Objects: 23,272장
+- 기존 actual/Open Products/Openverse train-only 원본: 741장
+- 최종 추가 train-only 원본: 24,013장
+- 전체 원본 감사: 43,290 row, 고유 SHA-256 42,995개
+- 출처 간 중복 hash: 294개
+- cross-leaf 충돌: 1개
+
+ABO에서는 147,702 listing을 읽어 main image 기준 29,941개를 매핑했다.
+leaf cap 이후 24,122개를 archive에서 검증했고, 최소 변 96px 미만 또는 decode
+실패 850개를 제외했다. image ID가 여러 leaf에 매핑된 296개와 동일 이미지를
+공유한 listing 5,892개도 제거했다.
+
+### 22.2 I/O와 누수 방지
+
+입력:
+
+- `data/raw/cashlog33/openimages_v7/manifest.jsonl`
+- `data/processed/cashlog33/training/originals_v2_additional/manifest.jsonl`
+- 각 row의 `relative_path`, `leaf_id`, `source`, `sha256`, license/attribution
+
+출력:
+
+- `checkpoints/cashlog33/vision_head_originals_v2/embedding_cache.npz`
+- `checkpoints/cashlog33/vision_head_originals_v2/vision_head.joblib`
+- `checkpoints/cashlog33/vision_head_originals_v2/vision_head_weighted.joblib`
+- `checkpoints/cashlog33/vision_head_originals_v2/vision_head_ensemble.joblib`
+- `reports/cashlog33/originals_v2/`
+
+Open Images만 결정적 train/validation/test split으로 사용했다. ABO, actual,
+Open Products, Openverse는 `split_lock=train`으로 고정했다. 평가셋에는
+추가 원본을 넣지 않았고 SHA-256 중복·충돌을 통합 단계에서 차단했다.
+
+### 22.3 학습과 막힌 지점
+
+첫 실행은 Codex sandbox에서 PyTorch가 MPS를 사용할 수 없어 중단됐다. native
+실행으로 전환한 뒤 MPS가 정상 활성화됐다.
+
+- Open Images train: 11,691장, 4-view 46,764개
+- validation: 2,696장
+- test: 3,596장
+- 추가 원본: 24,013장, 4-view 96,052개
+- 총 train augmented sample: 142,816개
+- embedding 시간: 2,948.70초
+
+학습 완료 후 MLflow 3.14가 file tracking store를 기본 차단해 마지막 기록
+단계가 실패했다. 생성된 406MB embedding cache와 모델 artifact는 정상
+보존됐으므로 이미지 재인코딩 없이 source weight와 앙상블을 튜닝했다.
+최종 결과는 기존 MLflow 서버 `http://127.0.0.1:5500`에 다시 기록했다.
+
+### 22.4 모델 선택
+
+신규 head 단독 비교:
+
+- Top-1: `0.7358 → 0.8665`
+- Top-3: `0.9221 → 0.9855`
+- Macro-F1: `0.5427 → 0.7253`
+- 실패 원인: `meal_grocery -37.50%p`, `life_goods -66.67%p`,
+  `health_med -25.00%p`
+
+additional source weight를 `0.10`으로 조정해 퇴행 폭을 줄였고, validation에서
+2%p leaf regression gate를 처음 통과하는 최소 신규 head 비중 `0.10`을
+선택했다. 최종 모델은 기존 head 90%와 source-weighted 신규 head 10%의 확률
+앙상블이다.
+
+고정 test 결과:
+
+- Top-1: `0.7358 → 0.7781` (+4.23%p)
+- Top-3: `0.9221 → 0.9511` (+2.89%p)
+- Macro-F1: `0.5427 → 0.5791` (+3.64%p)
+- 23개 평가 leaf 최소 recall 변화: `0.0000`
+- proxy gate: 통과
+- production gate: 차단
+
+실제 CashLog 사람이 라벨링한 동결 holdout은 2장뿐이다. 따라서 운영 모델
+`cashlog33-all-data-mps-v1`과
+`configs/cashlog/hybrid.serving.json`은 변경하지 않았다.
+
+MLflow:
+
+- experiment: `cashlog33-original-data`
+- final run ID: `3754ae4163a042e4a71f06ffd795d533`

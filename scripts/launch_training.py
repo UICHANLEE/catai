@@ -119,6 +119,10 @@ JOBS = {
         "--mlflow-run-name",
         "text-500k-alpha1e5",
     ],
+    "cashlog_originals_v2_mps": [
+        "bash",
+        "scripts/train_cashlog33_originals_mps.sh",
+    ],
     "cashlog_leaf_uecfood_auto": [
         ".venv/bin/python",
         "scripts/train_cashlog_category_from_uecfood.py",

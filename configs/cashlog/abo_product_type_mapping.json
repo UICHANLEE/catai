@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "dataset": "Amazon Berkeley Objects",
+  "mapping_version": "cashlog33-abo-v1",
+  "mapping_policy": "Only product types with a direct CashLog purchase-category interpretation are included. Purchase-intent categories and ambiguous accessories are excluded.",
+  "leaves": {
+    "meal_grocery": [
+      "BAKING_PAN",
+      "BREAD",
+      "BREAKFAST_CEREAL",
+      "DAIRY_BASED_CHEESE",
+      "EDIBLE_OIL_VEGETABLE",
+      "FLOUR",
+      "FRUIT",
+      "GROCERY",
+      "HERB",
+      "HONEY",
+      "LEGUME",
+      "NOODLE",
+      "NUT_BUTTER",
+      "PACKAGED_SOUP_AND_STEW",
+      "PANTRY",
+      "SALAD_DRESSING",
+      "SAUCE",
+      "SNACK_CHIP_AND_CRISP",
+      "SNACK_FOOD_BAR",
+      "SNACK_MIX",
+      "SUGAR",
+      "VEGETABLE"
+    ],
+    "meal_drink": [
+      "DAIRY_BASED_DRINK",
+      "DRINK_FLAVORED",
+      "JUICE_AND_JUICE_DRINK",
+      "WATER",
+      "WINE"
+    ],
+    "life_goods": [
+      "BASKET",
+      "BOTTLE",
+      "DRINKING_CUP",
+      "DISHWARE_BOWL",
+      "DISHWARE_PLACE_SETTING",
+      "DISHWARE_PLATE",
+      "FLATWARE",
+      "FOOD_STORAGE_BAG",
+      "HOME_BED_AND_BATH",
+      "KITCHEN",
+      "PAPER_PRODUCT",
+      "SAUTE_FRY_PAN",
+      "TOWEL_HOLDER",
+      "WASTE_BAG"
+    ],
+    "life_appliance": [
+      "AIR_CONDITIONER",
+      "BED",
+      "BENCH",
+      "CABINET",
+      "CHAIR",
+      "DESK",
+      "DRESSER",
+      "ELECTRIC_FAN",
+      "FOOD_BLENDER",
+      "FURNITURE",
+      "LAMP",
+      "MAJOR_HOME_APPLIANCES",
+      "REFRIGERATOR",
+      "SHELF",
+      "SOFA",
+      "TABLE",
+      "VACUUM_CLEANER",
+      "WASHING_MACHINE"
+    ],
+    "life_clean": [
+      "AREA_DEODORIZER",
+      "CLEANING_AGENT",
+      "CLEANING_BRUSH",
+      "DISHWASHER_DETERGENT",
+      "JANITORIAL_SUPPLY",
+      "LAUNDRY_DETERGENT",
+      "SKIN_CLEANING_WIPE",
+      "TRASH_CAN"
+    ],
+    "transit_maintain": [
+      "AUTO_OIL",
+      "AUTO_PART",
+      "CAR_TIRE",
+      "SCREWDRIVER",
+      "TOOLS",
+      "WRENCH"
+    ],
+    "fashion_clothes": [
+      "BACKPACK",
+      "BOOT",
+      "CLOTHING",
+      "DRESS",
+      "EYEWEAR",
+      "HANDBAG",
+      "HAT",
+      "LEOTARD",
+      "SALWAR_SUIT_SET",
+      "SANDAL",
+      "SHOES",
+      "SUITCASE"
+    ],
+    "fashion_beauty": [
+      "ABIS_BEAUTY",
+      "BATHWATER_ADDITIVE",
+      "BEAUTY",
+      "CONDITIONER",
+      "COSMETIC_BRUSH",
+      "LIP_COLOR",
+      "PERSONAL_CARE_APPLIANCE",
+      "SHAMPOO",
+      "SKIN_CLEANING_AGENT",
+      "SKIN_MOISTURIZER",
+      "SUNSCREEN"
+    ],
+    "health_med": [
+      "ABIS_DRUGSTORE",
+      "HERBAL_SUPPLEMENT",
+      "MEDICATION",
+      "MINERAL_SUPPLEMENT",
+      "ORTHOPEDIC_BRACE",
+      "PROFESSIONAL_HEALTHCARE",
+      "PROTEIN_SUPPLEMENT_POWDER",
+      "VITAMIN"
+    ],
+    "health_gym": [
+      "EXERCISE_BAND",
+      "EXERCISE_MAT",
+      "MUSCLE_ROLLER"
+    ],
+    "edu_book": [
+      "FILE_FOLDER",
+      "MARKING_PEN",
+      "PRINT_COPY_PAPER",
+      "STAPLER",
+      "TEACHING_EQUIPMENT",
+      "WRITING_BOARD",
+      "WRITING_INSTRUMENT"
+    ],
+    "leisure_hobby": [
+      "CAMERA_BAGS_AND_CASES",
+      "CAMERA_LENS_FILTERS",
+      "CAMERA_OTHER_ACCESSORIES",
+      "CAMERA_TRIPOD",
+      "INSTRUMENT_PARTS_AND_ACCESSORIES",
+      "MICROPHONE",
+      "SEWING_MACHINE",
+      "VIDEO_GAME_ACCESSORIES"
+    ],
+    "family_kids": [
+      "BABY_PRODUCT",
+      "DOLL",
+      "INFANT_BED",
+      "TOY_FIGURE"
+    ],
+    "family_pet": [
+      "PET_SUPPLIES"
+    ]
+  },
+  "explicit_exclusions": {
+    "CELLULAR_PHONE_CASE": "A phone case is not a mobile carrier bill.",
+    "COFFEE": "A packaged coffee product does not prove cafe spending.",
+    "TEA": "A packaged tea product does not prove cafe spending.",
+    "COOKIE": "A packaged cookie does not prove cafe spending.",
+    "CAKE": "A packaged cake does not prove cafe spending.",
+    "JEWELRY": "The object does not prove gift intent.",
+    "OFFICE_PRODUCTS": "The product type is too broad for edu_book.",
+    "SPORTING_GOODS": "The product type is ambiguous between health_gym and leisure_hobby."
+  }
+}

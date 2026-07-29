@@ -1,0 +1,245 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-29T07:37:18.912910+00:00",
+  "manifest_count": 7,
+  "rows": 43290,
+  "unique_hashes": 42995,
+  "duplicate_hashes": 294,
+  "cross_leaf_hash_conflicts": [
+    {
+      "sha256": "9069d6a75a3ea5cce3c9ae6d7c48127607f7ce6d348a067485c5041bd02aa32c",
+      "leaf_ids": [
+        "meal_drink",
+        "meal_grocery"
+      ],
+      "sample_ids": [
+        "openfoodfacts-beverages:3268840001008",
+        "openfoodfacts-beverages:3268840001008",
+        "openfoodfacts-grocery:3268840001008"
+      ]
+    }
+  ],
+  "leaf_counts_before_cross_source_dedup": {
+    "comm_internet": 2,
+    "comm_mobile": 113,
+    "edu_book": 637,
+    "edu_class": 14,
+    "family_kids": 432,
+    "family_pet": 2794,
+    "fashion_beauty": 1259,
+    "fashion_clothes": 10591,
+    "finance_insure": 2,
+    "finance_save": 2,
+    "gift_event": 7,
+    "gift_present": 2152,
+    "health_gym": 156,
+    "health_med": 680,
+    "housing_rent": 1,
+    "housing_utility": 2,
+    "leisure_hobby": 847,
+    "leisure_show": 2,
+    "leisure_trip": 165,
+    "life_appliance": 5532,
+    "life_clean": 902,
+    "life_goods": 3634,
+    "meal_cafe": 941,
+    "meal_dining": 1736,
+    "meal_drink": 887,
+    "meal_grocery": 5190,
+    "misc_other": 2,
+    "misc_uncat": 2,
+    "ocr_only": 1000,
+    "transit_car": 28,
+    "transit_maintain": 3465,
+    "transit_public": 113
+  },
+  "source_counts_before_cross_source_dedup": {
+    "amazon_berkeley_objects": 23272,
+    "cashlog_actual": 2,
+    "cord_v2_huggingface_mirror": 1000,
+    "openbeautyfacts": 298,
+    "openfoodfacts-beverages": 299,
+    "openfoodfacts-grocery": 99,
+    "openimages_v7_validation": 17983,
+    "openpetfoodfacts": 276,
+    "openverse": 61
+  },
+  "sources": [
+    {
+      "manifest": "/Users/uichan/workspace/catai/data/raw/cashlog33/actual/manifest.jsonl",
+      "rows": 2,
+      "unique_hashes": 2,
+      "source_counts": {
+        "cashlog_actual": 2
+      },
+      "leaf_counts": {
+        "meal_dining": 2
+      },
+      "license_counts": {
+        "private_consented": 2
+      }
+    },
+    {
+      "manifest": "/Users/uichan/workspace/catai/data/raw/cashlog33/openimages_v7/manifest.jsonl",
+      "rows": 17983,
+      "unique_hashes": 17983,
+      "source_counts": {
+        "openimages_v7_validation": 17983
+      },
+      "leaf_counts": {
+        "comm_mobile": 111,
+        "edu_book": 168,
+        "edu_class": 12,
+        "family_kids": 190,
+        "family_pet": 1681,
+        "fashion_beauty": 73,
+        "fashion_clothes": 5742,
+        "gift_event": 5,
+        "gift_present": 2150,
+        "health_gym": 2,
+        "health_med": 21,
+        "leisure_hobby": 515,
+        "leisure_trip": 163,
+        "life_appliance": 560,
+        "life_clean": 12,
+        "life_goods": 45,
+        "meal_cafe": 939,
+        "meal_dining": 1732,
+        "meal_drink": 350,
+        "meal_grocery": 440,
+        "transit_car": 26,
+        "transit_maintain": 2935,
+        "transit_public": 111
+      },
+      "license_counts": {
+        "by": 17983
+      }
+    },
+    {
+      "manifest": "/Users/uichan/workspace/catai/data/raw/cashlog33/openverse_smoke/manifest.jsonl",
+      "rows": 61,
+      "unique_hashes": 61,
+      "source_counts": {
+        "openverse": 61
+      },
+      "leaf_counts": {
+        "comm_internet": 2,
+        "comm_mobile": 2,
+        "edu_book": 2,
+        "edu_class": 2,
+        "family_kids": 2,
+        "family_pet": 2,
+        "fashion_beauty": 2,
+        "fashion_clothes": 2,
+        "finance_insure": 2,
+        "finance_save": 2,
+        "gift_event": 2,
+        "gift_present": 2,
+        "health_gym": 2,
+        "health_med": 2,
+        "housing_rent": 1,
+        "housing_utility": 2,
+        "leisure_hobby": 2,
+        "leisure_show": 2,
+        "leisure_trip": 2,
+        "life_appliance": 2,
+        "life_clean": 2,
+        "life_goods": 2,
+        "meal_cafe": 2,
+        "meal_dining": 2,
+        "meal_drink": 2,
+        "meal_grocery": 2,
+        "misc_other": 2,
+        "misc_uncat": 2,
+        "transit_car": 2,
+        "transit_maintain": 2,
+        "transit_public": 2
+      },
+      "license_counts": {
+        "by": 55,
+        "cc0": 4,
+        "pdm": 2
+      }
+    },
+    {
+      "manifest": "/Users/uichan/workspace/catai/data/raw/cashlog33/open_products_api/manifest.jsonl",
+      "rows": 391,
+      "unique_hashes": 390,
+      "source_counts": {
+        "openbeautyfacts": 100,
+        "openfoodfacts-beverages": 100,
+        "openfoodfacts-grocery": 99,
+        "openpetfoodfacts": 92
+      },
+      "leaf_counts": {
+        "family_pet": 92,
+        "fashion_beauty": 100,
+        "meal_drink": 100,
+        "meal_grocery": 99
+      },
+      "license_counts": {
+        "cc-by-sa-3.0": 391
+      }
+    },
+    {
+      "manifest": "/Users/uichan/workspace/catai/data/raw/cashlog33/open_products_api_250/manifest.jsonl",
+      "rows": 581,
+      "unique_hashes": 581,
+      "source_counts": {
+        "openbeautyfacts": 198,
+        "openfoodfacts-beverages": 199,
+        "openpetfoodfacts": 184
+      },
+      "leaf_counts": {
+        "family_pet": 184,
+        "fashion_beauty": 198,
+        "meal_drink": 199
+      },
+      "license_counts": {
+        "cc-by-sa-3.0": 581
+      }
+    },
+    {
+      "manifest": "/Users/uichan/workspace/catai/data/raw/cashlog33/cord_v2/manifest.jsonl",
+      "rows": 1000,
+      "unique_hashes": 998,
+      "source_counts": {
+        "cord_v2_huggingface_mirror": 1000
+      },
+      "leaf_counts": {
+        "ocr_only": 1000
+      },
+      "license_counts": {
+        "cc-by-4.0": 1000
+      }
+    },
+    {
+      "manifest": "/Users/uichan/workspace/catai/data/raw/cashlog33/abo_v1/manifest.jsonl",
+      "rows": 23272,
+      "unique_hashes": 23272,
+      "source_counts": {
+        "amazon_berkeley_objects": 23272
+      },
+      "leaf_counts": {
+        "edu_book": 467,
+        "family_kids": 240,
+        "family_pet": 835,
+        "fashion_beauty": 886,
+        "fashion_clothes": 4847,
+        "health_gym": 152,
+        "health_med": 657,
+        "leisure_hobby": 330,
+        "life_appliance": 4970,
+        "life_clean": 888,
+        "life_goods": 3587,
+        "meal_drink": 236,
+        "meal_grocery": 4649,
+        "transit_maintain": 528
+      },
+      "license_counts": {
+        "by": 23272
+      }
+    }
+  ],
+  "scope_warning": "Source labels and OCR-only images are not equivalent to human-verified CashLog labels."
+}
