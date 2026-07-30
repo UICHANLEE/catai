@@ -995,3 +995,85 @@ MLflow:
 
 - experiment: `cashlog33-original-data`
 - final run ID: `3754ae4163a042e4a71f06ffd795d533`
+
+## 23. 100만 뷰 경량 모델 MPS 학습과 승격 보류 (2026-07-30)
+
+### 23.1 수집·학습 입력
+
+- Open Images V7 train human-verified 후보: 469,006장
+- 라이선스·다운로드·디코딩 검증 통과: 469,001장
+- 12MB 원본 제한으로 영구 제외: 5장
+- 기존 원본: 24,013장
+- 전체 고유 원본: 493,014장
+- train 원본: 399,213장
+- validation 원본: 93,801장
+- 23개 시각 leaf에 사용 가능한 고유 train 원본: 399,198장
+- 외부 고정 test와 SHA-256/source ID 중복: 0건
+
+모든 사용 가능한 train 원본을 최소 한 번 포함한 뒤 원본이 적은 leaf를
+water-filling했다. 정확히 1,000,000개 `원본 index + augmentation seed` 뷰를
+만들었으며, 100만 개를 고유 원본 수로 기록하지 않는다.
+
+증강:
+
+- RandomResizedCrop 0.65~1.00
+- RandomHorizontalFlip p=0.5
+- ColorJitter 0.20/0.20/0.15/0.02
+- RandAugment 2회, magnitude 7
+- RandomErasing p=0.10
+
+### 23.2 MPS·MLflow 실행
+
+- backbone: `mobilenetv4_conv_small`
+- device: `mps`
+- batch: 128
+- 총 처리 views: 1,000,000
+- MLflow experiment: `cashlog33-million-compact`
+- run ID: `cf9524b498104f02b9749d7493357466`
+
+validation Macro-F1 기준 best는 epoch 1이었다.
+
+| epoch | 누적 views | train Top-1 | validation Top-1 | Macro-F1 |
+|---:|---:|---:|---:|---:|
+| 1 | 250,000 | 60.46% | 66.95% | 39.52% |
+| 2 | 500,000 | 64.55% | 64.55% | 39.24% |
+| 3 | 750,000 | 69.31% | 63.49% | 39.11% |
+| 4 | 1,000,000 | 71.97% | 62.90% | 39.05% |
+
+학습 정확도 상승과 validation 하락이 동시에 나타나 과적합으로 판정했다.
+
+### 23.3 ONNX·양자화
+
+- FP32 ONNX: 9.60MB
+- 정적 INT8 QDQ ONNX: 2.68MB
+- FP32 대비 크기 감소: 72.06%
+- 현재 시각 stack 대비 크기 감소: 99.82%
+- 전처리 포함 단일 이미지 p50: `54.15ms → 7.14ms`
+- FP32 대비 INT8 Top-1 drift: -2.59%p
+
+첫 후처리 실행은 경로 helper의 `ROOT` 상수 누락으로 중단됐다. checkpoint를
+재학습하지 않고 `CATAI_POSTTRAIN_ONLY=true`로 동일 MLflow run을 재개해
+ONNX 내보내기부터 비교까지 완료했다.
+
+### 23.4 고정 외부 test와 모델 교체 판정
+
+학습에 사용하지 않은 Open Images 공식 validation 고정 3,596장 비교:
+
+| 모델 | Top-1 | Top-3 | Macro-F1 |
+|---|---:|---:|---:|
+| 현재 운영 모델 | 68.69% | 90.66% | 51.94% |
+| 신규 FP32 | 64.38% | 84.65% | 36.51% |
+| 신규 INT8 | 61.79% | 83.01% | 34.86% |
+
+신규 INT8는 작고 빨랐지만 정확도·Macro-F1·leaf recall·양자화 drift gate를
+통과하지 못했다. FP32부터 기존보다 낮아 양자화 조정만으로 해결할 수 있는
+상태도 아니었다.
+
+- 최종 gate: 실패
+- serving config 교체: 없음
+- 유지 모델: `cashlog33-all-data-mps-v1`
+- 실제 사용자 사진 2장은 학습 이력과 중복되므로 gate에서 제외
+
+상세 출처, split, 증강, I/O, checksum, leaf별 결과는
+`ml_docs/CASHLOG33_MILLION_COMPACT_V1.md`와
+`reports/cashlog33/million_v1/compact_comparison.json`에 기록했다.

@@ -44,6 +44,9 @@ MODEL_STATE: dict[str, Any] = {
     "warmup_ms": None,
     "device": None,
     "model": None,
+    "vision_backend": None,
+    "vision_providers": None,
+    "vision_temperature": None,
 }
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 INFERENCE_SEMAPHORE = asyncio.Semaphore(
@@ -69,6 +72,7 @@ def get_classifier() -> Any:
 
     classifier = load_cashlog_classifier_from_env()
     load_ms = (time.perf_counter() - started) * 1000.0
+    compact_session = getattr(classifier, "compact_vision_session", None)
     MODEL_STATE.update(
         {
             "loaded": True,
@@ -78,6 +82,15 @@ def get_classifier() -> Any:
                 getattr(classifier, "config", {}).get(
                     "model_version", classifier.__class__.__name__
                 )
+            ),
+            "vision_backend": getattr(classifier, "vision_backend", None),
+            "vision_providers": (
+                compact_session.get_providers()
+                if compact_session is not None
+                else None
+            ),
+            "vision_temperature": getattr(
+                classifier, "compact_vision_temperature", None
             ),
         }
     )
@@ -297,6 +310,9 @@ def health() -> dict[str, Any]:
         "model_loaded": bool(MODEL_STATE["loaded"]),
         "model_device": MODEL_STATE["device"],
         "model_version": MODEL_STATE["model"],
+        "vision_backend": MODEL_STATE["vision_backend"],
+        "vision_providers": MODEL_STATE["vision_providers"],
+        "vision_temperature": MODEL_STATE["vision_temperature"],
         "model_load_ms": MODEL_STATE["load_ms"],
         "model_warmup_ms": MODEL_STATE["warmup_ms"],
     }

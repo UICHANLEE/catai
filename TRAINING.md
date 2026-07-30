@@ -447,6 +447,32 @@ Run the full isolated candidate workflow with Airflow DAG
 `checkpoints/cashlog33/airflow_latest`; the DAG does not overwrite the serving
 configuration.
 
+## CashLog million-view compact MPS candidate
+
+The million-view workflow uses every eligible original once before
+oversampling rare visual leaves. Open Images train is split deterministically
+80/20, while the official Open Images validation proxy remains external.
+Original-image counts and logical augmented views are reported separately.
+
+```bash
+.venv/bin/python scripts/collect_cashlog_openimages_train.py --workers 256
+scripts/run_cashlog33_million_compact.sh
+```
+
+The second command builds the exact 1,000,000-view schedule, trains
+MobileNetV4 on Apple MPS, logs each epoch to MLflow, exports FP32 ONNX, performs
+static INT8 QDQ quantization, stages the small deployment artifact, evaluates
+the frozen external proxy, and promotes only when every recorded gate passes.
+
+Apple Metal is not available inside the Linux Airflow container. This workflow
+therefore runs through the host wrapper while MLflow remains the shared run and
+artifact monitor. Korean pipeline logs are written to
+`logs/cashlog33-million-v1/pipeline_ko.jsonl`; model run logs are written to
+`checkpoints/cashlog33/mobilenet_million_v1/run_log_ko.jsonl`.
+
+The complete data, augmentation, ONNX I/O, calibration, comparison, and
+rollback contract is in `ml_docs/CASHLOG33_MILLION_COMPACT_V1.md`.
+
 ## Docker, Airflow, MLflow, Jenkins
 
 Build the training image:

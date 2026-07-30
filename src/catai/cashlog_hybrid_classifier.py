@@ -13,11 +13,11 @@ from typing import Any
 import joblib
 import cv2
 import numpy as np
+import onnxruntime as ort
 import torch
 from PIL import Image
 from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
 from torch.nn import functional as F
-from transformers import AutoModel, AutoProcessor
 
 from .cashlog_classifier import (
     CashlogCategoryClassifier,
@@ -51,40 +51,128 @@ class CashlogHybridClassifier:
         self.category_by_id = {str(row["id"]): row for row in self.categories}
         self._validate_contract()
 
-        self.vision_model_path = self._resolve_path(self.config["vision_model"])
-        self.vision_head_path = self._resolve_path(self.config["vision_head"])
         self.text_model_path = self._resolve_path(self.config["text_model"])
         self.ocr_detector_model_path = self._resolve_path(self.config["ocr_detector_model"])
         self.ocr_classifier_model_path = self._resolve_path(
             self.config["ocr_classifier_model"]
         )
         self.ocr_model_path = self._resolve_path(self.config["ocr_model"])
-        self._verify_file(self.vision_model_path / "model.safetensors", "vision_model_sha256")
-        self._verify_file(self.vision_head_path, "vision_head_sha256")
         self._verify_file(self.text_model_path, "text_model_sha256")
         self._verify_file(self.ocr_detector_model_path, "ocr_detector_model_sha256")
         self._verify_file(self.ocr_classifier_model_path, "ocr_classifier_model_sha256")
         self._verify_file(self.ocr_model_path, "ocr_model_sha256")
 
-        use_mps_fp16 = self.device.type == "mps" and bool(
-            self.runtime.get("mps_float16", False)
-        )
-        self.vision_dtype = torch.float16 if use_mps_fp16 else torch.float32
-        self.vision_model = AutoModel.from_pretrained(
-            self.vision_model_path, local_files_only=True
-        ).to(device=self.device, dtype=self.vision_dtype).eval()
-        self.vision_processor = AutoProcessor.from_pretrained(
-            self.vision_model_path, local_files_only=True, use_fast=True
-        )
-        self.prompts, self.prompt_indexes = self._build_prompts()
-        self.text_features = self._encode_prompt_features()
-        vision_head_artifact = joblib.load(self.vision_head_path)
-        self.vision_head = vision_head_artifact["model"]
-        self.vision_head_classes = [str(value) for value in vision_head_artifact["classes"]]
-        if vision_head_artifact["vision_model_sha256"] != self.config["vision_model_sha256"]:
-            raise ValueError("vision head was trained with a different SigLIP2 checkpoint")
-        if not set(self.vision_head_classes).issubset(set(self.leaf_ids)):
-            raise ValueError("vision head contains labels outside the 33-leaf taxonomy")
+        self.compact_vision_session: ort.InferenceSession | None = None
+        self.compact_vision_classes: list[str] = []
+        self.compact_vision_input_size = 224
+        self.compact_vision_temperature: float | None = None
+        compact_config = self.config.get("compact_vision")
+        if compact_config and bool(compact_config.get("enabled", True)):
+            compact_model_path = self._resolve_path(compact_config["model"])
+            compact_labels_path = self._resolve_path(compact_config["labels"])
+            self._verify_expected_file(
+                compact_model_path, str(compact_config["model_sha256"])
+            )
+            self._verify_expected_file(
+                compact_labels_path, str(compact_config["labels_sha256"])
+            )
+            compact_categories = json.loads(
+                compact_labels_path.read_text(encoding="utf-8")
+            )
+            self.compact_vision_classes = [
+                str(category["id"]) for category in compact_categories
+            ]
+            if (
+                len(self.compact_vision_classes)
+                != len(set(self.compact_vision_classes))
+                or not set(self.compact_vision_classes).issubset(set(self.leaf_ids))
+            ):
+                raise ValueError(
+                    "compact vision labels must be unique taxonomy leaf ids"
+                )
+            requested_providers = [
+                str(value)
+                for value in compact_config.get(
+                    "providers", ["CPUExecutionProvider"]
+                )
+            ]
+            available_providers = set(ort.get_available_providers())
+            providers = [
+                provider
+                for provider in requested_providers
+                if provider in available_providers
+            ]
+            if "CPUExecutionProvider" not in providers:
+                providers.append("CPUExecutionProvider")
+            self.compact_vision_session = ort.InferenceSession(
+                str(compact_model_path), providers=providers
+            )
+            self.compact_vision_input_size = int(
+                compact_config.get("input_size", 224)
+            )
+            self.compact_vision_temperature = float(
+                compact_config.get("temperature", 1.0)
+            )
+            output_shape = self.compact_vision_session.get_outputs()[0].shape
+            if (
+                output_shape
+                and isinstance(output_shape[-1], int)
+                and output_shape[-1] != len(self.compact_vision_classes)
+            ):
+                raise ValueError(
+                    "compact ONNX output count does not match its labels"
+                )
+            if self.compact_vision_input_size <= 0:
+                raise ValueError("compact vision input_size must be positive")
+            if (
+                not np.isfinite(self.compact_vision_temperature)
+                or self.compact_vision_temperature <= 0
+            ):
+                raise ValueError(
+                    "compact vision temperature must be finite and positive"
+                )
+            self.vision_member_name = "mobilenetv4_int8_onnx"
+            self.vision_backend = "compact_onnx"
+        else:
+            from transformers import AutoModel, AutoProcessor
+
+            self.vision_model_path = self._resolve_path(self.config["vision_model"])
+            self.vision_head_path = self._resolve_path(self.config["vision_head"])
+            self._verify_file(
+                self.vision_model_path / "model.safetensors",
+                "vision_model_sha256",
+            )
+            self._verify_file(self.vision_head_path, "vision_head_sha256")
+            use_mps_fp16 = self.device.type == "mps" and bool(
+                self.runtime.get("mps_float16", False)
+            )
+            self.vision_dtype = torch.float16 if use_mps_fp16 else torch.float32
+            self.vision_model = AutoModel.from_pretrained(
+                self.vision_model_path, local_files_only=True
+            ).to(device=self.device, dtype=self.vision_dtype).eval()
+            self.vision_processor = AutoProcessor.from_pretrained(
+                self.vision_model_path, local_files_only=True, use_fast=True
+            )
+            self.prompts, self.prompt_indexes = self._build_prompts()
+            self.text_features = self._encode_prompt_features()
+            vision_head_artifact = joblib.load(self.vision_head_path)
+            self.vision_head = vision_head_artifact["model"]
+            self.vision_head_classes = [
+                str(value) for value in vision_head_artifact["classes"]
+            ]
+            if (
+                vision_head_artifact["vision_model_sha256"]
+                != self.config["vision_model_sha256"]
+            ):
+                raise ValueError(
+                    "vision head was trained with a different SigLIP2 checkpoint"
+                )
+            if not set(self.vision_head_classes).issubset(set(self.leaf_ids)):
+                raise ValueError(
+                    "vision head contains labels outside the 33-leaf taxonomy"
+                )
+            self.vision_member_name = "siglip2_vision_head"
+            self.vision_backend = "siglip2"
 
         self.meal_specialist = None
         self.meal_specialist_weight = 0.0
@@ -237,6 +325,49 @@ class CashlogHybridClassifier:
         }
 
     @staticmethod
+    def _compact_image_tensor(
+        image: Image.Image, image_size: int
+    ) -> np.ndarray:
+        resize_size = round(image_size / 0.875)
+        width, height = image.size
+        if width <= height:
+            resized_width = resize_size
+            resized_height = int(height * resize_size / width)
+        else:
+            resized_height = resize_size
+            resized_width = int(width * resize_size / height)
+        resized = image.convert("RGB").resize(
+            (resized_width, resized_height), Image.Resampling.BICUBIC
+        )
+        left = max(0, round((resized_width - image_size) / 2))
+        top = max(0, round((resized_height - image_size) / 2))
+        cropped = resized.crop((left, top, left + image_size, top + image_size))
+        values = np.asarray(cropped, dtype=np.float32) / 255.0
+        values = (
+            values - np.asarray((0.485, 0.456, 0.406), dtype=np.float32)
+        ) / np.asarray((0.229, 0.224, 0.225), dtype=np.float32)
+        return np.ascontiguousarray(
+            np.transpose(values, (2, 0, 1))[None, ...]
+        )
+
+    def _compact_vision_scores(self, image: Image.Image) -> dict[str, float]:
+        if self.compact_vision_session is None:
+            raise RuntimeError("compact vision session is not initialized")
+        tensor = self._compact_image_tensor(image, self.compact_vision_input_size)
+        input_name = self.compact_vision_session.get_inputs()[0].name
+        logits = self.compact_vision_session.run(None, {input_name: tensor})[0][0]
+        temperature = self.compact_vision_temperature
+        if temperature is None:
+            raise RuntimeError("compact vision temperature is not initialized")
+        logits = logits.astype(np.float64, copy=False) / temperature
+        probabilities = np.exp(logits - logits.max())
+        probabilities /= probabilities.sum()
+        scores = {leaf_id: 0.0 for leaf_id in self.leaf_ids}
+        for index, leaf_id in enumerate(self.compact_vision_classes):
+            scores[leaf_id] = float(probabilities[index])
+        return scores
+
+    @staticmethod
     def _normalize(values: dict[str, float], leaf_ids: list[str]) -> dict[str, float]:
         total = sum(max(0.0, float(values.get(leaf_id, 0.0))) for leaf_id in leaf_ids)
         if total <= 0:
@@ -282,6 +413,29 @@ class CashlogHybridClassifier:
         return output
 
     def _vision_result(self, image: Image.Image) -> dict[str, Any]:
+        if self.compact_vision_session is not None:
+            vision = self._normalize(
+                self._compact_vision_scores(image), self.leaf_ids
+            )
+            specialist_scores: dict[str, float] = {}
+            if self.meal_specialist is not None:
+                predictions = self.meal_specialist.predict(image, top_k=4)
+                specialist_scores = {
+                    prediction.cashlog_leaf_id: float(prediction.confidence)
+                    for prediction in predictions
+                }
+                vision = self._normalize(
+                    self._blend_meal_specialist(
+                        vision,
+                        specialist_scores,
+                        self.meal_specialist_weight,
+                    ),
+                    self.leaf_ids,
+                )
+            return {
+                "scores": vision,
+                "meal_specialist_scores": specialist_scores,
+            }
         inputs = self.vision_processor(images=[image], return_tensors="pt")
         inputs = self._move_vision_inputs(inputs)
         with torch.inference_mode():
@@ -622,12 +776,15 @@ class CashlogHybridClassifier:
             "model": str(self.config["model_version"]),
             "taxonomy_version": str(self.config["taxonomy_version"]),
             "engine": (
-                "siglip2+mobilenetv4+rapidocr+tfidf"
+                f"{self.vision_member_name}+mobilenetv4+rapidocr+tfidf"
                 if self.meal_specialist is not None
-                else "siglip2+rapidocr+tfidf"
+                else f"{self.vision_member_name}+rapidocr+tfidf"
             ),
             "members": [
-                {"name": "siglip2_vision_head", "weight": result["fusion_weights"]["vision"]},
+                {
+                    "name": self.vision_member_name,
+                    "weight": result["fusion_weights"]["vision"],
+                },
                 {"name": "rapidocr_text_sgd", "weight": result["fusion_weights"]["text"]},
                 {"name": "cashlog_ocr_lexicon", "weight": result["fusion_weights"]["lexicon"]},
             ]

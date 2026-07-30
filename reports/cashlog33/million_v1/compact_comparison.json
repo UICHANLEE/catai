@@ -1,0 +1,283 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-30T01:53:46.553274+00:00",
+  "serving_config_sha256": "abc1dd12be6218b6b2ee58c5c1cfa422b6ae010414b80b951a3081c57f3ae583",
+  "evaluation_set": {
+    "kind": "external_visual_proxy",
+    "official_split": "Open Images validation",
+    "selection": "frozen test rows from the existing split manifest",
+    "samples": 3596,
+    "manifest_sha256": "c25a0f30fe5b8ce9f471893f1f13320ed0fecbbc6646ac890429401d8b90ab09",
+    "split_sha256": "948cbe1f1107df47e4a64867f4ce7c1de438804e868bb475224131b6df9e6317",
+    "warning": "This is a visual proxy benchmark, not a manually labeled CashLog production-photo holdout."
+  },
+  "baseline": {
+    "samples": 3596,
+    "top1_accuracy": 0.6868743047830923,
+    "top3_accuracy": 0.9065628476084538,
+    "macro_f1": 0.5193881723734828,
+    "per_leaf_recall": {
+      "comm_mobile": 0.9545454545454546,
+      "edu_book": 0.6470588235294118,
+      "edu_class": 1.0,
+      "family_kids": 0.7105263157894737,
+      "family_pet": 0.9970238095238095,
+      "fashion_beauty": 0.8666666666666667,
+      "fashion_clothes": 0.4686411149825784,
+      "gift_event": 1.0,
+      "gift_present": 0.913953488372093,
+      "health_gym": 1.0,
+      "health_med": 1.0,
+      "leisure_hobby": 0.8543689320388349,
+      "leisure_trip": 0.9696969696969697,
+      "life_appliance": 0.4642857142857143,
+      "life_clean": 1.0,
+      "life_goods": 1.0,
+      "meal_cafe": 0.30319148936170215,
+      "meal_dining": 0.6907514450867052,
+      "meal_drink": 0.8428571428571429,
+      "meal_grocery": 0.75,
+      "transit_car": 0.8,
+      "transit_maintain": 0.8262350936967632,
+      "transit_public": 0.9090909090909091
+    },
+    "per_leaf_support": {
+      "comm_mobile": 22,
+      "edu_book": 34,
+      "edu_class": 2,
+      "family_kids": 38,
+      "family_pet": 336,
+      "fashion_beauty": 15,
+      "fashion_clothes": 1148,
+      "gift_event": 1,
+      "gift_present": 430,
+      "health_gym": 1,
+      "health_med": 4,
+      "leisure_hobby": 103,
+      "leisure_trip": 33,
+      "life_appliance": 112,
+      "life_clean": 2,
+      "life_goods": 9,
+      "meal_cafe": 188,
+      "meal_dining": 346,
+      "meal_drink": 70,
+      "meal_grocery": 88,
+      "transit_car": 5,
+      "transit_maintain": 587,
+      "transit_public": 22
+    },
+    "runtime": {
+      "device": "mps",
+      "mean_vision_ms": 54.23501928197582,
+      "p50_vision_ms": 54.147354094311595,
+      "p95_vision_ms": 59.92225999943912
+    }
+  },
+  "fp32": {
+    "samples": 3596,
+    "top1_accuracy": 0.6437708565072302,
+    "top3_accuracy": 0.8464961067853171,
+    "macro_f1": 0.3650871473033727,
+    "per_leaf_recall": {
+      "meal_grocery": 0.6022727272727273,
+      "meal_dining": 0.661849710982659,
+      "meal_cafe": 0.44148936170212766,
+      "meal_drink": 0.7285714285714285,
+      "life_goods": 0.3333333333333333,
+      "life_appliance": 0.3482142857142857,
+      "life_clean": 1.0,
+      "transit_public": 0.7727272727272727,
+      "transit_car": 0.8,
+      "transit_maintain": 0.8313458262350937,
+      "comm_mobile": 0.6818181818181818,
+      "fashion_clothes": 0.47822299651567945,
+      "fashion_beauty": 0.3333333333333333,
+      "health_med": 0.0,
+      "health_gym": 0.0,
+      "edu_class": 1.0,
+      "edu_book": 0.35294117647058826,
+      "leisure_trip": 0.8484848484848485,
+      "leisure_hobby": 0.07766990291262135,
+      "gift_event": 1.0,
+      "gift_present": 0.9162790697674419,
+      "family_kids": 0.3157894736842105,
+      "family_pet": 0.9523809523809523
+    },
+    "runtime": {
+      "provider": "CPUExecutionProvider",
+      "total_seconds": 6.887464453466237,
+      "images_per_second": 522.1079577681523,
+      "mean_model_ms_per_image": 1.9153126956246487,
+      "single_image_model_p50_ms": 2.8186459094285965,
+      "single_image_model_p95_ms": 3.143560606986284,
+      "single_image_p50_ms": 9.091270389035344,
+      "single_image_p95_ms": 9.789076680317521,
+      "single_image_timing_scope": "PIL resize, crop, normalize, and ONNX Runtime inference"
+    },
+    "artifact": {
+      "path": "checkpoints/cashlog33/mobilenet_million_v1/onnx/cashlog33-visual-fp32.onnx",
+      "bytes": 10070473,
+      "megabytes": 9.603951454162598,
+      "sha256": "00d61fa6d28aa5e2de0e8be9e5057ec20a428e14d15d31cb6d35fb72590b3e31"
+    }
+  },
+  "int8": {
+    "samples": 3596,
+    "top1_accuracy": 0.617908787541713,
+    "top3_accuracy": 0.8300889877641824,
+    "macro_f1": 0.34856099678083835,
+    "per_leaf_recall": {
+      "meal_grocery": 0.6931818181818182,
+      "meal_dining": 0.5982658959537572,
+      "meal_cafe": 0.44148936170212766,
+      "meal_drink": 0.6142857142857143,
+      "life_goods": 0.0,
+      "life_appliance": 0.30357142857142855,
+      "life_clean": 1.0,
+      "transit_public": 0.7727272727272727,
+      "transit_car": 0.8,
+      "transit_maintain": 0.8126064735945485,
+      "comm_mobile": 0.7727272727272727,
+      "fashion_clothes": 0.48257839721254353,
+      "fashion_beauty": 0.4,
+      "health_med": 0.0,
+      "health_gym": 0.0,
+      "edu_class": 1.0,
+      "edu_book": 0.29411764705882354,
+      "leisure_trip": 0.7272727272727273,
+      "leisure_hobby": 0.05825242718446602,
+      "gift_event": 1.0,
+      "gift_present": 0.8860465116279069,
+      "family_kids": 0.47368421052631576,
+      "family_pet": 0.8184523809523809
+    },
+    "runtime": {
+      "provider": "CPUExecutionProvider",
+      "total_seconds": 2.4755524597130716,
+      "images_per_second": 1452.6050481744967,
+      "mean_model_ms_per_image": 0.6884183703317774,
+      "single_image_model_p50_ms": 0.9122707415372133,
+      "single_image_model_p95_ms": 1.048107841052115,
+      "single_image_p50_ms": 7.138896035030484,
+      "single_image_p95_ms": 7.665610848926007,
+      "single_image_timing_scope": "PIL resize, crop, normalize, and ONNX Runtime inference"
+    },
+    "artifact": {
+      "path": "src/catai/assets/cashlog33_mobilenetv4_int8_v1/model.int8.onnx",
+      "bytes": 2814055,
+      "megabytes": 2.68369197845459,
+      "sha256": "6c49f951c1a8af8ac6b2fae730cdaddbc4a060ea5d9607185ae0a4ba717022fc"
+    }
+  },
+  "candidate_delta_vs_baseline": {
+    "top1_accuracy": -0.06896551724137934,
+    "top3_accuracy": -0.07647385984427146,
+    "macro_f1": -0.17082717559264443,
+    "per_leaf_recall": {
+      "meal_grocery": -0.05681818181818177,
+      "meal_dining": -0.09248554913294793,
+      "meal_cafe": 0.1382978723404255,
+      "meal_drink": -0.22857142857142854,
+      "life_goods": -1.0,
+      "life_appliance": -0.16071428571428575,
+      "life_clean": 0.0,
+      "transit_public": -0.13636363636363635,
+      "transit_car": 0.0,
+      "transit_maintain": -0.013628620102214661,
+      "comm_mobile": -0.18181818181818188,
+      "fashion_clothes": 0.013937282229965153,
+      "fashion_beauty": -0.4666666666666667,
+      "health_med": -1.0,
+      "health_gym": -1.0,
+      "edu_class": 0.0,
+      "edu_book": -0.35294117647058826,
+      "leisure_trip": -0.24242424242424243,
+      "leisure_hobby": -0.7961165048543689,
+      "gift_event": 0.0,
+      "gift_present": -0.027906976744186074,
+      "family_kids": -0.2368421052631579,
+      "family_pet": -0.1785714285714286
+    }
+  },
+  "quantization_delta": {
+    "top1_accuracy": -0.025862068965517238,
+    "top3_accuracy": -0.016407119021134675,
+    "macro_f1": -0.016526150522534366,
+    "top1_agreement": 0.8089543937708565,
+    "mean_abs_logit_error": 0.196590855717659
+  },
+  "detail_artifacts": {
+    "predictions": {
+      "path": "reports/cashlog33/million_v1/int8_predictions.jsonl",
+      "bytes": 1085304,
+      "megabytes": 1.0350265502929688,
+      "sha256": "3bacc4476dbb8e277435ff1b09a0da7f7c7702d493922b7099da045c57c03657"
+    },
+    "confusion_matrix": {
+      "path": "reports/cashlog33/million_v1/int8_confusion_matrix.csv",
+      "bytes": 1728,
+      "megabytes": 0.00164794921875,
+      "sha256": "4e83f7da52436ff0a6855fc1f9a6261ad2c0ddcc480cfc5920d2512272527b7f"
+    },
+    "per_leaf_metrics": {
+      "path": "reports/cashlog33/million_v1/int8_per_leaf_metrics.csv",
+      "bytes": 2209,
+      "megabytes": 0.0021066665649414062,
+      "sha256": "2a7b69a899e4423469a7190ec5bad63796c79c093daae22db069bbee64159ade"
+    }
+  },
+  "size_comparison": {
+    "current_visual_stack_bytes": 1569777120,
+    "current_visual_stack_megabytes": 1497.0561218261719,
+    "int8_bytes": 2814055,
+    "reduction_ratio": 0.9982073537930022
+  },
+  "latency_comparison": {
+    "current_visual_p50_ms": 54.147354094311595,
+    "int8_single_image_p50_ms": 7.138896035030484,
+    "reduction_ratio": 0.8681579893526052
+  },
+  "actual_feedback_replay_smoke": {
+    "warning": "These human-verified feedback images overlap the training history. This is a replay smoke test only and is deliberately excluded from the promotion gate.",
+    "training_sha256_overlap": 2,
+    "actual_samples": 2,
+    "baseline": {
+      "samples": 2,
+      "top1_accuracy": 1.0
+    },
+    "candidate": {
+      "samples": 2,
+      "top1_accuracy": 0.5
+    }
+  },
+  "gate_thresholds": {
+    "actual_feedback_replay_is_promotion_gate": false,
+    "max_per_leaf_recall_regression": 0.1,
+    "minimum_per_leaf_support_for_recall_gate": 30,
+    "recall_gate_leaves": [
+      "meal_grocery",
+      "meal_dining",
+      "meal_cafe",
+      "meal_drink",
+      "life_appliance",
+      "transit_maintain",
+      "fashion_clothes",
+      "edu_book",
+      "leisure_trip",
+      "leisure_hobby",
+      "gift_present",
+      "family_kids",
+      "family_pet"
+    ],
+    "max_quantized_top1_drift": 0.005
+  },
+  "gate_checks": {
+    "int8_top1_beats_baseline": false,
+    "int8_macro_f1_beats_baseline": false,
+    "per_leaf_recall_regression_within_limit": false,
+    "int8_top1_drift_within_limit": false,
+    "int8_smaller_than_current_visual_stack": true,
+    "int8_single_image_faster_than_current_visual_stack": true
+  },
+  "promotion_gate_passed": false
+}
