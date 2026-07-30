@@ -48,21 +48,53 @@ def validate_additional_train_rows(
     allowed_leaves: set[str],
 ) -> list[dict[str, Any]]:
     base_ids = {str(row["sample_id"]) for row in base_rows}
+    base_hashes = {
+        str(row["sha256"]) for row in base_rows if str(row.get("sha256") or "")
+    }
+    base_openimages_ids = {
+        str(row["source_id"])
+        for row in base_rows
+        if str(row.get("source_id") or "")
+        and str(row.get("source") or "").startswith("openimages")
+    }
     seen: set[str] = set()
+    seen_hashes: set[str] = set()
     for row in rows:
         sample_id = str(row.get("sample_id") or "")
         leaf_id = str(row.get("leaf_id") or "")
+        source = str(row.get("source") or "")
+        split_lock = str(row.get("split_lock") or "")
+        official_train = (
+            source == "openimages_v7_train"
+            and str(row.get("official_split") or "") == "train"
+        )
         if not sample_id:
             raise ValueError("additional training rows require sample_id")
         if sample_id in base_ids or sample_id in seen:
             raise ValueError(f"duplicate additional training sample_id: {sample_id}")
-        if str(row.get("split_lock") or "") != "train":
+        if split_lock != "train" and not official_train:
             raise ValueError(f"additional training row is not train-locked: {sample_id}")
         if leaf_id not in allowed_leaves:
             raise ValueError(f"additional training row uses an unknown taxonomy leaf: {leaf_id}")
+        digest = str(row.get("sha256") or "")
+        if digest and digest in base_hashes:
+            raise ValueError(f"additional training image overlaps the base holdout: {sample_id}")
+        if digest and digest in seen_hashes:
+            raise ValueError(f"duplicate additional training image hash: {sample_id}")
+        source_id = str(row.get("source_id") or "")
+        if (
+            source.startswith("openimages")
+            and source_id
+            and source_id in base_openimages_ids
+        ):
+            raise ValueError(
+                f"additional Open Images row overlaps the base holdout: {sample_id}"
+            )
         if not resolve_image_path(row).is_file():
             raise ValueError(f"additional training image is missing: {sample_id}")
         seen.add(sample_id)
+        if digest:
+            seen_hashes.add(digest)
     return rows
 
 
@@ -142,7 +174,15 @@ def encode_batch(
     device: torch.device,
 ) -> np.ndarray:
     inputs = processor(images=images, return_tensors="pt")
-    inputs = {key: value.to(device) for key, value in inputs.items()}
+    model_dtype = next(model.parameters()).dtype
+    inputs = {
+        key: (
+            value.to(device=device, dtype=model_dtype)
+            if value.is_floating_point()
+            else value.to(device)
+        )
+        for key, value in inputs.items()
+    }
     with torch.inference_mode():
         features = model.get_image_features(**inputs)
         if not isinstance(features, torch.Tensor):
@@ -191,6 +231,102 @@ def encode_rows(
                 flush()
     flush()
     return np.concatenate(batches, axis=0), labels, sample_ids
+
+
+def encode_rows_sharded(
+    model: Any,
+    processor: Any,
+    rows: list[dict[str, Any]],
+    augment: bool,
+    batch_size: int,
+    device: torch.device,
+    label: str,
+    shard_dir: Path,
+    rows_per_shard: int,
+) -> tuple[np.ndarray, list[str], list[str]]:
+    if rows_per_shard <= 0:
+        raise ValueError("rows_per_shard must be positive")
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    progress_path = shard_dir / "progress.json"
+    log_path = shard_dir / "progress_ko.jsonl"
+    embedding_parts: list[np.ndarray] = []
+    labels: list[str] = []
+    sample_ids: list[str] = []
+    total_shards = (len(rows) + rows_per_shard - 1) // rows_per_shard
+    started = time.perf_counter()
+
+    for shard_index, offset in enumerate(
+        range(0, len(rows), rows_per_shard), start=1
+    ):
+        shard_rows = rows[offset : offset + rows_per_shard]
+        shard_path = shard_dir / f"shard-{shard_index:05d}.npz"
+        expected_ids = [
+            f"{row['sample_id']}#view{view_index}"
+            for row in shard_rows
+            for view_index in range(4 if augment else 1)
+        ]
+        if shard_path.is_file():
+            with np.load(shard_path, allow_pickle=False) as cached:
+                cached_ids = [str(value) for value in cached["sample_ids"].tolist()]
+                if cached_ids != expected_ids:
+                    raise ValueError(
+                        f"embedding shard input mismatch: {shard_path}"
+                    )
+                shard_embeddings = cached["embeddings"]
+                shard_labels = [
+                    str(value) for value in cached["labels"].tolist()
+                ]
+            state = "재사용"
+        else:
+            shard_embeddings, shard_labels, cached_ids = encode_rows(
+                model,
+                processor,
+                shard_rows,
+                augment,
+                batch_size,
+                device,
+                f"{label}-shard-{shard_index}",
+            )
+            if cached_ids != expected_ids:
+                raise RuntimeError("encoded shard sample order changed")
+            temporary = shard_path.with_suffix(".npz.tmp")
+            with temporary.open("wb") as handle:
+                np.savez(
+                    handle,
+                    embeddings=shard_embeddings,
+                    labels=np.asarray(shard_labels),
+                    sample_ids=np.asarray(cached_ids),
+                )
+            os.replace(temporary, shard_path)
+            state = "생성"
+        embedding_parts.append(shard_embeddings)
+        labels.extend(shard_labels)
+        sample_ids.extend(expected_ids)
+        elapsed = time.perf_counter() - started
+        completed_rows = min(offset + len(shard_rows), len(rows))
+        progress = {
+            "시각": utc_now(),
+            "단계": "SigLIP2_추가원본_임베딩",
+            "상태": state,
+            "완료_shard": shard_index,
+            "전체_shard": total_shards,
+            "완료_원본": completed_rows,
+            "전체_원본": len(rows),
+            "완료_임베딩": len(sample_ids),
+            "초당_원본": completed_rows / max(elapsed, 1e-9),
+            "경과_초": elapsed,
+        }
+        temporary_progress = progress_path.with_suffix(".json.tmp")
+        temporary_progress.write_text(
+            json.dumps(progress, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary_progress, progress_path)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(progress, ensure_ascii=False) + "\n")
+        print(json.dumps(progress, ensure_ascii=False), flush=True)
+
+    return np.concatenate(embedding_parts, axis=0), labels, sample_ids
 
 
 def top3_accuracy(labels: list[str], probabilities: np.ndarray, classes: list[str]) -> float:
@@ -265,6 +401,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--additional-train-manifest", type=Path, action="append", default=[])
     parser.add_argument("--base-embedding-cache", type=Path)
+    parser.add_argument("--allow-cached-train-suffix", action="store_true")
+    parser.add_argument(
+        "--additional-views",
+        choices=["original", "four"],
+        default="four",
+    )
+    parser.add_argument("--additional-shard-dir", type=Path)
+    parser.add_argument("--additional-rows-per-shard", type=int, default=4096)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument(
         "--class-weight",
@@ -273,6 +417,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--device", choices=["auto", "cpu", "mps", "cuda"], default="auto")
     parser.add_argument("--seed", type=int, default=250716)
+    parser.add_argument("--c-values", default="0.03,0.10,0.30,1.0,3.0,10.0")
+    parser.add_argument("--mps-float16", action="store_true")
     parser.add_argument("--mlflow-tracking-uri", default=os.getenv("MLFLOW_TRACKING_URI"))
     parser.add_argument("--mlflow-experiment", default="cashlog33-hybrid-v2")
     parser.add_argument("--mlflow-run-name", default="cashlog33-siglip2-linear-head-v1")
@@ -338,6 +484,7 @@ def main() -> None:
         raise RuntimeError("the visual manifest requires at least one test leaf")
 
     started = time.perf_counter()
+    cached_train_suffix_samples = 0
     if args.base_embedding_cache:
         with np.load(args.base_embedding_cache, allow_pickle=False) as cache:
             required_cache_keys = {
@@ -363,17 +510,30 @@ def main() -> None:
         ]
         expected_val = [str(row["leaf_id"]) for row in splits["val"]]
         expected_test = [str(row["leaf_id"]) for row in splits["test"]]
+        cached_train_suffix_samples = len(train_labels) - len(expected_train)
+        if cached_train_suffix_samples < 0:
+            raise ValueError("base embedding cache has fewer train rows than expected")
         if (
-            train_labels != expected_train
+            train_labels[: len(expected_train)] != expected_train
             or val_labels != expected_val
             or test_labels != expected_test
         ):
             raise ValueError("base embedding cache labels do not match the frozen split")
+        if cached_train_suffix_samples and not args.allow_cached_train_suffix:
+            raise ValueError(
+                "base embedding cache contains an additional train suffix; "
+                "pass --allow-cached-train-suffix after auditing its provenance"
+            )
     else:
         device = choose_device(args.device)
+        model_dtype = (
+            torch.float16
+            if args.mps_float16 and device.type == "mps"
+            else torch.float32
+        )
         vision_model = (
             AutoModel.from_pretrained(args.vision_model, local_files_only=True)
-            .to(device)
+            .to(device=device, dtype=model_dtype)
             .eval()
         )
         processor = AutoProcessor.from_pretrained(
@@ -393,23 +553,42 @@ def main() -> None:
 
     if additional_rows:
         device = choose_device(args.device)
+        model_dtype = (
+            torch.float16
+            if args.mps_float16 and device.type == "mps"
+            else torch.float32
+        )
         vision_model = (
             AutoModel.from_pretrained(args.vision_model, local_files_only=True)
-            .to(device)
+            .to(device=device, dtype=model_dtype)
             .eval()
         )
         processor = AutoProcessor.from_pretrained(
             args.vision_model, local_files_only=True, use_fast=True
         )
-        additional_embeddings, additional_labels, _ = encode_rows(
-            vision_model,
-            processor,
-            additional_rows,
-            True,
-            args.batch_size,
-            device,
-            "additional-train",
-        )
+        additional_augment = args.additional_views == "four"
+        if args.additional_shard_dir:
+            additional_embeddings, additional_labels, _ = encode_rows_sharded(
+                vision_model,
+                processor,
+                additional_rows,
+                additional_augment,
+                args.batch_size,
+                device,
+                "additional-train",
+                args.additional_shard_dir,
+                args.additional_rows_per_shard,
+            )
+        else:
+            additional_embeddings, additional_labels, _ = encode_rows(
+                vision_model,
+                processor,
+                additional_rows,
+                additional_augment,
+                args.batch_size,
+                device,
+                "additional-train",
+            )
         train_embeddings = np.concatenate([train_embeddings, additional_embeddings], axis=0)
         train_labels.extend(additional_labels)
         del vision_model, processor
@@ -426,7 +605,10 @@ def main() -> None:
     )
 
     candidates: list[tuple[float, float, LogisticRegression, dict[str, float]]] = []
-    for c_value in [0.03, 0.10, 0.30, 1.0, 3.0, 10.0]:
+    c_values = [float(value) for value in args.c_values.split(",") if value]
+    if not c_values or any(value <= 0 for value in c_values):
+        raise ValueError("--c-values must contain positive numbers")
+    for c_value in c_values:
         head = LogisticRegression(
             C=c_value,
             class_weight=(
@@ -489,8 +671,22 @@ def main() -> None:
         "taxonomy_leaf_count": len(category_order),
         "split_counts": split_counts,
         "train_augmented_samples": len(train_labels),
+        "cached_train_suffix_samples": cached_train_suffix_samples,
         "additional_train_rows": len(additional_rows),
-        "additional_train_augmented_samples": len(additional_rows) * 4,
+        "additional_train_augmented_samples": (
+            len(additional_rows) * (4 if args.additional_views == "four" else 1)
+        ),
+        "additional_views": args.additional_views,
+        "additional_shard_dir": (
+            str(args.additional_shard_dir)
+            if args.additional_shard_dir
+            else None
+        ),
+        "embedding_precision": (
+            "float16-mps"
+            if args.mps_float16 and args.device == "mps"
+            else "float32"
+        ),
         "additional_train_source_counts": additional_source_counts,
         "additional_training_manifests": additional_manifest_metadata,
         "base_embedding_cache": str(args.base_embedding_cache) if args.base_embedding_cache else None,
@@ -565,7 +761,10 @@ def main() -> None:
                     "selected_c": selected_c,
                     "class_weight": args.class_weight,
                     "train_augmented_samples": len(train_labels),
+                    "cached_train_suffix_samples": cached_train_suffix_samples,
                     "additional_train_rows": len(additional_rows),
+                    "additional_views": args.additional_views,
+                    "embedding_precision": metrics["embedding_precision"],
                     "selected_for_hybrid": selected,
                 }
             )

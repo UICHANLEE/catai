@@ -66,6 +66,8 @@ class CashlogHybridClassifier:
         self.compact_vision_classes: list[str] = []
         self.compact_vision_input_size = 224
         self.compact_vision_temperature: float | None = None
+        self.compact_vision_output_kind = "logits"
+        self.compact_vision_preprocess = "imagenet_center_crop"
         compact_config = self.config.get("compact_vision")
         if compact_config and bool(compact_config.get("enabled", True)):
             compact_model_path = self._resolve_path(compact_config["model"])
@@ -113,6 +115,14 @@ class CashlogHybridClassifier:
             self.compact_vision_temperature = float(
                 compact_config.get("temperature", 1.0)
             )
+            self.compact_vision_output_kind = str(
+                compact_config.get("output_kind", "logits")
+            )
+            self.compact_vision_preprocess = str(
+                compact_config.get(
+                    "preprocess", "imagenet_center_crop"
+                )
+            )
             output_shape = self.compact_vision_session.get_outputs()[0].shape
             if (
                 output_shape
@@ -131,7 +141,23 @@ class CashlogHybridClassifier:
                 raise ValueError(
                     "compact vision temperature must be finite and positive"
                 )
-            self.vision_member_name = "mobilenetv4_int8_onnx"
+            if self.compact_vision_output_kind not in {
+                "logits",
+                "probabilities",
+            }:
+                raise ValueError(
+                    "compact vision output_kind must be logits or probabilities"
+                )
+            if self.compact_vision_preprocess not in {
+                "imagenet_center_crop",
+                "siglip_resize",
+            }:
+                raise ValueError("unsupported compact vision preprocess")
+            self.vision_member_name = str(
+                compact_config.get(
+                    "member_name", "mobilenetv4_int8_onnx"
+                )
+            )
             self.vision_backend = "compact_onnx"
         else:
             from transformers import AutoModel, AutoProcessor
@@ -326,8 +352,21 @@ class CashlogHybridClassifier:
 
     @staticmethod
     def _compact_image_tensor(
-        image: Image.Image, image_size: int
+        image: Image.Image,
+        image_size: int,
+        preprocess: str = "imagenet_center_crop",
     ) -> np.ndarray:
+        if preprocess == "siglip_resize":
+            resized = image.convert("RGB").resize(
+                (image_size, image_size), Image.Resampling.BICUBIC
+            )
+            values = np.asarray(resized, dtype=np.float32) / 255.0
+            values = (values - 0.5) / 0.5
+            return np.ascontiguousarray(
+                np.transpose(values, (2, 0, 1))[None, ...]
+            )
+        if preprocess != "imagenet_center_crop":
+            raise ValueError(f"unsupported compact preprocess: {preprocess}")
         resize_size = round(image_size / 0.875)
         width, height = image.size
         if width <= height:
@@ -353,15 +392,34 @@ class CashlogHybridClassifier:
     def _compact_vision_scores(self, image: Image.Image) -> dict[str, float]:
         if self.compact_vision_session is None:
             raise RuntimeError("compact vision session is not initialized")
-        tensor = self._compact_image_tensor(image, self.compact_vision_input_size)
+        tensor = self._compact_image_tensor(
+            image,
+            self.compact_vision_input_size,
+            self.compact_vision_preprocess,
+        )
         input_name = self.compact_vision_session.get_inputs()[0].name
-        logits = self.compact_vision_session.run(None, {input_name: tensor})[0][0]
-        temperature = self.compact_vision_temperature
-        if temperature is None:
-            raise RuntimeError("compact vision temperature is not initialized")
-        logits = logits.astype(np.float64, copy=False) / temperature
-        probabilities = np.exp(logits - logits.max())
-        probabilities /= probabilities.sum()
+        output = self.compact_vision_session.run(
+            None, {input_name: tensor}
+        )[0][0]
+        if self.compact_vision_output_kind == "probabilities":
+            probabilities = np.maximum(
+                output.astype(np.float64, copy=False), 0.0
+            )
+            total = float(probabilities.sum())
+            if not np.isfinite(total) or total <= 0:
+                raise RuntimeError(
+                    "compact vision probabilities are invalid"
+                )
+            probabilities /= total
+        else:
+            temperature = self.compact_vision_temperature
+            if temperature is None:
+                raise RuntimeError(
+                    "compact vision temperature is not initialized"
+                )
+            logits = output.astype(np.float64, copy=False) / temperature
+            probabilities = np.exp(logits - logits.max())
+            probabilities /= probabilities.sum()
         scores = {leaf_id: 0.0 for leaf_id in self.leaf_ids}
         for index, leaf_id in enumerate(self.compact_vision_classes):
             scores[leaf_id] = float(probabilities[index])

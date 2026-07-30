@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "model_version": "cashlog33-same-siglip-expanded-int8-v1",
+  "taxonomy_version": "13.33.1",
+  "categories": "categories.json",
+  "semantics": "leaf_semantics.json",
+  "ocr_lexicon": "ocr_lexicon.json",
+  "vision_model": "../../models/siglip2-base-patch16-224",
+  "vision_model_sha256": "612923381c76ec5a9bed335d1c48827e3f2e506ac31b044b63b2031fadee6a0b",
+  "vision_head": "../../checkpoints/cashlog33/vision_head_siglip_expanded_v1/vision_head.joblib",
+  "vision_head_sha256": "b46b7aade7fe066a6bbff7addf8a8a8a7d6009c2dea0e397a3f757f06fe23621",
+  "vision_blend": {
+    "zero_shot": 0.3,
+    "linear_head": 0.7
+  },
+  "text_model": "../../checkpoints/cashlog33/text_all_data_v1/text_model.joblib",
+  "text_model_sha256": "fa85c45c9d9464116c8fe16ff02d6656960a948acf5d752647244b5639b13fba",
+  "meal_specialist": {
+    "enabled": true,
+    "checkpoint": "../../checkpoints/cashlog_meal2_mps_target95/best.pt",
+    "checkpoint_sha256": "45052fc6fe4950ca03f72384cae4916c133c84f16babd954d8a65cd960db821d",
+    "labels": "../../checkpoints/cashlog_meal2_mps_target95/labels.json",
+    "labels_sha256": "0f881e73bd01c8e5940505eef84f296d8990426ab47783c14dea954f84a41b2b",
+    "blend_weight": 0.65
+  },
+  "ocr_detector_model": "../../models/rapidocr/PP-OCRv6_det_small.onnx",
+  "ocr_detector_model_sha256": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+  "ocr_classifier_model": "../../models/rapidocr/ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+  "ocr_classifier_model_sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+  "ocr_model": "../../models/rapidocr/korean_PP-OCRv5_rec_mobile.onnx",
+  "ocr_model_sha256": "cd6e2ea50f6943ca7271eb8c56a877a5a90720b7047fe9c41a2e541a25773c9b",
+  "runtime": {
+    "parallel_vision_ocr": true,
+    "mps_float16": true,
+    "torch_cpu_threads": 4,
+    "ocr_max_side_len": 960,
+    "ocr_detection_side_len": 736,
+    "ocr_detection_limit_type": "min",
+    "ocr_use_cls": true,
+    "ocr_intra_op_threads": 6,
+    "ocr_inter_op_threads": 1,
+    "ocr_use_coreml": false
+  },
+  "fusion": {
+    "with_lexicon": {
+      "vision": 0.25,
+      "text": 0.6,
+      "lexicon": 0.15
+    },
+    "without_lexicon": {
+      "vision": 0.85,
+      "text": 0.15,
+      "lexicon": 0.0
+    },
+    "agreement_bonus": 0.1
+  },
+  "decision": {
+    "allow_auto_confirm": false,
+    "auto_confirm_threshold": 0.65,
+    "minimum_margin": 0.15,
+    "ocr_min_line_score": 0.5,
+    "semantic_fallback_threshold": 0.25,
+    "fallback_confidence": 0.55,
+    "generic_receipt_min_terms": 2,
+    "generic_receipt_terms": [
+      "영수증",
+      "결제",
+      "승인번호",
+      "공급가액",
+      "부가세",
+      "결제금액",
+      "신용카드"
+    ],
+    "low_information_laplacian_variance": 100.0,
+    "low_information_grayscale_std": 15.0
+  },
+  "generated_at": "2026-07-30T06:22:25.685815+00:00",
+  "source_template": "hybrid.serving.json",
+  "compact_vision": {
+    "enabled": true,
+    "runtime": "onnxruntime-int8",
+    "member_name": "siglip2_int8_onnx",
+    "model": "../../checkpoints/cashlog33/vision_head_siglip_expanded_v1/onnx/cashlog33-siglip-vision-int8.onnx",
+    "model_sha256": "662155c45b4ef68e146663d004f31d4c7c36b5595d2ffa0224606b53cb9539d7",
+    "labels": "../../checkpoints/cashlog33/vision_head_siglip_expanded_v1/onnx/labels.json",
+    "labels_sha256": "abd8e710f0a56ead07eca9260171d5c8ca729fda951ee36835a7403cbcf7ec82",
+    "providers": [
+      "CPUExecutionProvider"
+    ],
+    "input_size": 224,
+    "preprocess": "siglip_resize",
+    "output_kind": "probabilities",
+    "temperature": 1.0,
+    "quantization": {
+      "method": "dynamic-weight-only",
+      "format": "QOperator",
+      "weight_type": "QInt8",
+      "per_channel": true,
+      "operators": [
+        "MatMul",
+        "Gemm"
+      ],
+      "keep_first_encoder_layers_fp32": 6,
+      "keep_last_encoder_layers_fp32": 0,
+      "excluded_node_count": 433
+    }
+  }
+}

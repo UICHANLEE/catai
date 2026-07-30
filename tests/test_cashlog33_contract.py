@@ -52,6 +52,56 @@ class Cashlog33ContractTests(unittest.TestCase):
             ),
         )
 
+    def test_official_openimages_train_rows_are_train_only(self) -> None:
+        row = {
+            "sample_id": "openimages-v7-train:new",
+            "source_id": "new",
+            "source": "openimages_v7_train",
+            "official_split": "train",
+            "leaf_id": "meal_dining",
+            "sha256": "new-hash",
+            "relative_path": __file__,
+        }
+        self.assertEqual(
+            [row],
+            validate_additional_train_rows(
+                [row],
+                base_rows=[
+                    {
+                        "sample_id": "openimages-v7-validation:old",
+                        "source_id": "old",
+                        "source": "openimages_v7_validation",
+                        "sha256": "old-hash",
+                    }
+                ],
+                allowed_leaves={"meal_dining"},
+            ),
+        )
+
+    def test_additional_rows_cannot_overlap_base_holdout_hash(self) -> None:
+        row = {
+            "sample_id": "openimages-v7-train:new",
+            "source_id": "new",
+            "source": "openimages_v7_train",
+            "official_split": "train",
+            "leaf_id": "meal_dining",
+            "sha256": "same-hash",
+            "relative_path": __file__,
+        }
+        with self.assertRaisesRegex(ValueError, "overlaps the base holdout"):
+            validate_additional_train_rows(
+                [row],
+                base_rows=[
+                    {
+                        "sample_id": "openimages-v7-validation:old",
+                        "source_id": "old",
+                        "source": "openimages_v7_validation",
+                        "sha256": "same-hash",
+                    }
+                ],
+                allowed_leaves={"meal_dining"},
+            )
+
     def test_explicit_training_splits_preserve_train_lock(self) -> None:
         rows = [
             {

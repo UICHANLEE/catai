@@ -70,6 +70,21 @@ class CompactExportTest(unittest.TestCase):
         training = evaluation(image).numpy()[None, ...]
         np.testing.assert_array_equal(serving, training)
 
+    def test_siglip_onnx_preprocess_matches_direct_resize_contract(self) -> None:
+        pixels = np.random.default_rng(77).integers(
+            0, 256, (333, 517, 3), dtype=np.uint8
+        )
+        image = Image.fromarray(pixels)
+        serving = CashlogHybridClassifier._compact_image_tensor(
+            image, 224, "siglip_resize"
+        )
+        resized = image.resize((224, 224), Image.Resampling.BICUBIC)
+        expected = np.asarray(resized, dtype=np.float32) / 255.0
+        expected = (expected - 0.5) / 0.5
+        expected = np.transpose(expected, (2, 0, 1))[None, ...]
+
+        np.testing.assert_array_equal(serving, expected)
+
 
 if __name__ == "__main__":
     unittest.main()

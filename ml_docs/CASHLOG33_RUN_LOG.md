@@ -1077,3 +1077,36 @@ ONNX 내보내기부터 비교까지 완료했다.
 상세 출처, split, 증강, I/O, checksum, leaf별 결과는
 `ml_docs/CASHLOG33_MILLION_COMPACT_V1.md`와
 `reports/cashlog33/million_v1/compact_comparison.json`에 기록했다.
+
+## 24. 동일 SigLIP2 데이터 확장·혼합 INT8 검증 (2026-07-30)
+
+이전 MobileNetV4 실험은 backbone이 달라 데이터 추가 효과를 현재 운영
+SigLIP2와 직접 비교할 수 없었다. 비교 계약을 바로잡아 현재와 같은
+SigLIP2 Base patch16 224, 같은 전처리, 같은 0.30/0.70 vision blend, 같은
+meal specialist를 사용하고 학습 데이터만 추가했다.
+
+- 신규 Open Images 공식 train 원본: 469,001장
+- 최종 head 학습 embeddings: 611,817개
+- 고정 외부 test: 3,596장
+- MPS float16 embedding 처리량: 39.20장/초
+- embedding 시간: 12,005.15초
+- MLflow training run: `1c04395494bb4e8d9e77e7247787a4f5`
+- MLflow monitor run: `be6b9da8b0b74663bcde9f274c5aac85`
+
+동일 serving 경로 결과:
+
+| 모델 | Top-1 | Top-3 | Macro-F1 |
+|---|---:|---:|---:|
+| 현재 SigLIP2 | 68.69% | 90.66% | 51.94% |
+| 추가 데이터 SigLIP2 native | 75.78% | 93.97% | 62.47% |
+| 같은 후보 mixed INT8 | 75.39% | 93.91% | 62.63% |
+
+전체 dynamic INT8은 97.11MB였지만 정확도 손실이 컸다. encoder 앞 6개
+block을 FP32로 보호하고 뒤 6개 block만 QInt8로 변환한 218.36MB mixed
+후보는 native 대비 Top-1 drift를 -0.39%p로 줄였다.
+
+최종 승격은 보류했다. `meal_grocery` recall이 현재 대비 native -10.23%p,
+mixed INT8 -11.36%p였고 mixed INT8 p50 93.05ms가 현재 MPS p50 54.15ms보다
+느렸다. 결과 확인 후 gate를 완화하지 않았으며 serving config는 변경하지 않았다.
+상세 기록은 `ml_docs/CASHLOG33_SAME_SIGLIP_EXPANSION.md`와
+`reports/cashlog33/siglip_expanded_v1/final_comparison.json`이다.
