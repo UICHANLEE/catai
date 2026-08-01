@@ -1110,3 +1110,19 @@ mixed INT8 -11.36%p였고 mixed INT8 p50 93.05ms가 현재 MPS p50 54.15ms보다
 느렸다. 결과 확인 후 gate를 완화하지 않았으며 serving config는 변경하지 않았다.
 상세 기록은 `ml_docs/CASHLOG33_SAME_SIGLIP_EXPANSION.md`와
 `reports/cashlog33/siglip_expanded_v1/final_comparison.json`이다.
+
+## 25. 사용자 승인 SigLIP2 native 승격 (2026-08-01)
+
+사용자가 Top-1 +7.09%p, Top-3 +3.31%p, Macro-F1 +10.53%p 개선을 확인하고
+`meal_grocery` recall -10.23%p 예외를 명시적으로 승인했다. 자동 gate 보고서는
+변경하지 않고 별도 native override 승격 스크립트로 SHA와 평가 artifact를
+재검증했다.
+
+- 승격: `cashlog33-same-siglip-expanded-v1`
+- 미승격: mixed INT8 ONNX. 현재 MPS보다 느리므로 후보로만 보존
+- rollback: `cashlog33-all-data-mps-v1`
+- API: MPS/SigLIP2, health 정상
+- actual smoke: 2장 중 1장 Top-1 일치, 2장 모두 사용자 확인 모드
+
+승격 기록은
+`reports/cashlog33/siglip_expanded_v1/native_promotion.json`에 보존했다.

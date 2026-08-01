@@ -226,6 +226,27 @@ CPU p50은 93.05ms로 현재 MPS p50 54.15ms보다 느렸다.
 후 완화하지 않았다. 후보와 ONNX artifact는 다음 개선 실험의 baseline으로
 보존한다.
 
+### 7.5 사용자 승인 native 승격 (2026-08-01)
+
+사용자가 native 후보의 전체 지표 개선 폭을 확인한 뒤 recall 예외를 명시적으로
+승인했다. 느린 mixed INT8는 승격하지 않고 기존 SigLIP2 MPS backbone을 유지한 채
+89KB native head만 교체했다. 자동 게이트 결과는 수정하지 않았으며 별도 override
+승격으로 기록한다.
+
+- 승격 모델: `cashlog33-same-siglip-expanded-v1`
+- serving head SHA-256:
+  `b46b7aade7fe066a6bbff7addf8a8a8a7d6009c2dea0e397a3f757f06fe23621`
+- rollback 모델: `cashlog33-all-data-mps-v1`
+- rollback config: `configs/cashlog/hybrid.serving.previous.json`
+- API health: 정상
+- device/backend: MPS/SigLIP2
+- 보유 actual 재생: 2장 중 Top-1 1장 일치
+- 실제 샘플 2장 모두 `need_user_check=true`로 자동 확정 차단
+
+실제 샘플 2장은 학습 이력과 겹치므로 성능 증명이나 승격 gate로 사용하지 않는다.
+이 결과는 배포 후 smoke test로만 기록한다. 감사 기록은
+`reports/cashlog33/siglip_expanded_v1/native_promotion.json`이다.
+
 ## 8. 산출물
 
 - native head:

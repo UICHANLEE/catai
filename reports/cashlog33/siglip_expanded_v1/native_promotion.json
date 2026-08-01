@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "promoted_at": "2026-08-01T13:41:16.208900+00:00",
+  "promotion_type": "explicit_user_approved_native_override",
+  "model_version": "cashlog33-same-siglip-expanded-v1",
+  "vision_backend": "siglip2",
+  "device": "mps",
+  "vision_head_sha256": "b46b7aade7fe066a6bbff7addf8a8a8a7d6009c2dea0e397a3f757f06fe23621",
+  "approval_context": {
+    "native_top1_delta": 0.07091212458286988,
+    "native_top3_delta": 0.0330923248053393,
+    "native_macro_f1_delta": 0.10526859533921906,
+    "accepted_exception": "meal_grocery recall -0.10227272727272729",
+    "compact_int8_promoted": false
+  },
+  "rollback": {
+    "model_version": "cashlog33-all-data-mps-v1",
+    "config": "configs/cashlog/hybrid.serving.previous.json",
+    "vision_head_sha256": "47ec06ff8eda10f3b3535386a3bdac609909d94a58b0c1313b47f52d29a64055"
+  },
+  "verification": {
+    "health": "ok",
+    "loaded_model_version": "cashlog33-same-siglip-expanded-v1",
+    "loaded_device": "mps",
+    "actual_replay_samples": 2,
+    "actual_top1_matches": 1,
+    "all_actual_requests_guarded": true,
+    "actual_replay_is_promotion_gate": false
+  }
+}
